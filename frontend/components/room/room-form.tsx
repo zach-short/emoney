@@ -3,14 +3,16 @@ import { ColorSelect } from "@/components/color-select-drawer";
 import { sulpherBold } from "@/components/fonts";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import Logo from "./logo";
+import Logo from "../logo";
 import { toast } from "sonner";
 import { playerStore } from "@/lib/utils/playerStore";
+
 interface p {
   type?: string;
   buttonText1?: string;
   buttonText2?: string;
 }
+
 const RoomForm = ({
   type = "JOIN",
   buttonText1 = "Next",
@@ -21,6 +23,37 @@ const RoomForm = ({
   const [showDetails, setShowDetails] = useState(false);
   const router = useRouter();
   const [selectedColor, setSelectedColor] = useState<string>("");
+
+  const checkExistingPlayer = async () => {
+    try {
+      const existingPlayerId = playerStore.getPlayerIdForRoom(code);
+
+      if (existingPlayerId) {
+        const response = await fetch(
+          `https://emoney.up.railway.app/player/room/${code}?playerId=${existingPlayerId}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (data.existingPlayer && data.existingPlayer.isValid) {
+          router.push(`/room/${code}`);
+          return;
+        }
+      }
+
+      setShowDetails(true);
+    } catch (error) {
+      console.error("Error checking existing player:", error);
+      toast.error("Unable to verify player. Please try again.");
+      setShowDetails(true);
+    }
+  };
 
   const joinRoom = async () => {
     if (!selectedColor) {
@@ -116,12 +149,7 @@ const RoomForm = ({
               />
               <button
                 className={`border font rounded-lg p-4 border-yellow-200 w-64 mt-4 text-black text-2xl`}
-                onClick={() => {
-                  if (!code) {
-                    toast.error("Please provide a code");
-                  }
-                  setShowDetails(true);
-                }}
+                onClick={checkExistingPlayer}
               >
                 {buttonText1}
               </button>
