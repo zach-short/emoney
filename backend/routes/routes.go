@@ -15,6 +15,7 @@ func Routes(r *gin.Engine) {
 		rooms.POST("", controllers.CreateRoom)
 
 		room := rooms.Group("/:code")
+		room.DELETE("", controllers.DeleteRoom)
 		room.GET("/players", controllers.GetPlayersInRoom)
 		room.GET("/properties", controllers.GetAvailableProperties)
 		room.GET("/exists", controllers.CheckIfRoomCodeExists)
