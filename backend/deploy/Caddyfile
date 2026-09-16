@@ -1,0 +1,30 @@
+# /etc/caddy/Caddyfile
+#
+# Caddy terminates TLS and proxies to the Go process on :8080. It gets and renews
+# a Let's Encrypt cert on its own, which is what makes wss:// work -- the frontend
+# hardcodes the wss scheme in production (lib/utils/wsHelpers.ts).
+#
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# DNS: point an A record at the VM's static IP. If the domain is on Cloudflare,
+# leave this record GREY-clouded (DNS only) -- an orange-clouded record breaks
+# the HTTP-01 challenge and adds a proxy hop in front of your websockets.
+
+api.emoney.club {
+	encode zstd gzip
+
+	reverse_proxy 127.0.0.1:8080 {
+		# Caddy hijacks and passes Upgrade requests through untouched, so
+		# /v1/ws/room/:code needs no special handling. This only affects
+		# streaming HTTP responses.
+		flush_interval -1
+	}
+
+	log {
+		output file /var/log/caddy/emoney.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

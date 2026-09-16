@@ -1,0 +1,55 @@
+# /etc/systemd/system/emoney.service
+#
+#   sudo cp deploy/emoney.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now emoney
+#
+# Restart=always + enable == the box can reboot, the process can crash, and the
+# server comes back on its own. You only touch this again when the code changes.
+
+[Unit]
+Description=E-Money backend (Go/Gin + WebSocket rooms)
+After=network-online.target
+Wants=network-online.target
+# Never give up retrying. Default is 5 starts / 10s then permanent failure, which
+# would leave the service dead after e.g. a Mongo Atlas blip at boot.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=emoney
+Group=emoney
+WorkingDirectory=/opt/emoney
+ExecStart=/opt/emoney/emoney
+EnvironmentFile=/etc/emoney/emoney.env
+
+Restart=always
+RestartSec=2s
+
+# main.go has no graceful-shutdown hook (r.Run blocks), so SIGTERM just ends it.
+# 10s is plenty; websocket clients reconnect.
+KillSignal=SIGTERM
+TimeoutStopSec=10s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=emoney
+
+# --- hardening ---------------------------------------------------------------
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+# AF_NETLINK is required: Go's resolver uses it for interface/route lookup, and
+# mongodb+srv:// needs DNS SRV+TXT resolution. Drop it and Mongo connects never.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target
