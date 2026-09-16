@@ -1,6 +1,6 @@
 "use client";
 import { EventHistory, Player, Property, Room } from "@/types/schema";
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useEffect, useEffectEvent, useRef, useState } from "react";
 import RoomView from "@/components/room/room.client";
 import { getWsUrl } from "@/lib/utils/wsHelpers";
 import { playerStore } from "@/lib/utils/playerHelpers";
@@ -21,10 +21,6 @@ interface WebSocketMessage {
 
 const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
   const { code } = use(params);
-  const [player, setPlayer] = useState<Player | null>(null);
-  const [otherPlayers, setOtherPlayers] = useState<Player[]>([]);
-  const [room, setRoom] = useState<Room>();
-  const [eventHistory, setEventHistory] = useState<EventHistory[]>([]);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
@@ -59,22 +55,15 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     },
   );
 
-  useEffect(() => {
-    if (playersData) {
-      const currentPlayer =
-        playersData.players?.find((p: Player) => p.id === storedPlayerId) ||
-        null;
-
-      const others =
-        playersData.players?.filter((p: Player) => p.id !== storedPlayerId) ||
-        [];
-
-      setPlayer(currentPlayer);
-      setOtherPlayers(others);
-      setRoom(playersData.room);
-      setEventHistory(playersData.eventHistory || []);
-    }
-  }, [playersData, storedPlayerId]);
+  // Straight projections of the fetched room payload -- no effect needed, and
+  // this keeps the players, room and history from lagging a render behind the
+  // data that produced them.
+  const player: Player | null =
+    playersData?.players?.find((p: Player) => p.id === storedPlayerId) || null;
+  const otherPlayers: Player[] =
+    playersData?.players?.filter((p: Player) => p.id !== storedPlayerId) || [];
+  const room: Room | undefined = playersData?.room;
+  const eventHistory: EventHistory[] = playersData?.eventHistory || [];
 
   const handleBankerTransaction = (
     amount: string,
@@ -105,20 +94,24 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     });
   };
 
-  const handleWebSocketNotification = (message: WebSocketMessage) => {
-    toast.success(message.payload.notification, {
-      duration: 4000,
-      icon: getIconForType(message.type),
-      position: "top-center",
-      className: `${josephinBold.className} text-xs text-center`,
-    });
+  // An effect event so the socket always calls the current refetchers without
+  // the connection effect having to re-run (and reconnect) on every render.
+  const handleWebSocketNotification = useEffectEvent(
+    (message: WebSocketMessage) => {
+      toast.success(message.payload.notification, {
+        duration: 4000,
+        icon: getIconForType(message.type),
+        position: "top-center",
+        className: `${josephinBold.className} text-xs text-center`,
+      });
 
-    refetchPlayers();
+      refetchPlayers();
 
-    if (["PURCHASE_PROPERTY", "MANAGE_PROPERTIES"].includes(message.type)) {
-      refetchProperties();
-    }
-  };
+      if (["PURCHASE_PROPERTY", "MANAGE_PROPERTIES"].includes(message.type)) {
+        refetchProperties();
+      }
+    },
+  );
 
   const handleFreeParkingAction = (
     amount: string,
@@ -176,25 +169,36 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     });
   };
 
-  const initializeWebSocket = useCallback(
-    (playerId: string) => {
-      if (ws.current?.readyState === WebSocket.OPEN) return;
+  useEffect(() => {
+    if (!storedPlayerId) {
+      toast.error("No player found for this room");
+      return;
+    }
 
-      ws.current = new WebSocket(getWsUrl(code));
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-      ws.current.onopen = () => {
-        sendMessage(ws.current, "JOIN", { playerId });
+    const connect = () => {
+      if (disposed || ws.current?.readyState === WebSocket.OPEN) return;
+
+      const socket = new WebSocket(getWsUrl(code));
+      ws.current = socket;
+
+      socket.onopen = () => {
+        sendMessage(socket, "JOIN", { playerId: storedPlayerId });
       };
 
-      ws.current.onerror = (error) => {
+      socket.onerror = (error) => {
         console.error("WebSocket error:", error);
       };
 
-      ws.current.onclose = () => {
-        setTimeout(() => initializeWebSocket(playerId), 1000);
+      socket.onclose = () => {
+        // Don't resurrect the socket the cleanup below just closed.
+        if (disposed) return;
+        reconnectTimer = setTimeout(connect, 1000);
       };
 
-      ws.current.onmessage = (event) => {
+      socket.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
           handleWebSocketNotification(message);
@@ -202,22 +206,17 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
           console.error("Error processing WebSocket message:", error);
         }
       };
-    },
-    [code],
-  );
+    };
 
-  useEffect(() => {
-    if (!storedPlayerId) {
-      toast.error("No player found for this room");
-      return;
-    }
-
-    initializeWebSocket(storedPlayerId);
+    connect();
 
     return () => {
+      disposed = true;
+      clearTimeout(reconnectTimer);
       ws.current?.close();
+      ws.current = null;
     };
-  }, [code, storedPlayerId, initializeWebSocket]);
+  }, [code, storedPlayerId]);
 
   const isLoading = playersLoading || propertiesLoading;
   const error = playersError || propertiesError;
@@ -230,11 +229,13 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
       }
       : null;
 
-  useEffect(() => {
-    if (!initialLoadComplete && playersData && propertiesData) {
-      setInitialLoadComplete(true);
-    }
-  }, [playersData, propertiesData, initialLoadComplete]);
+  // A one-way latch: once the room has rendered, later refetches must not drop
+  // it back to the full-page loader. Adjusting it during render (rather than
+  // in an effect) keeps the first paint from flashing the loader after the
+  // data has already arrived.
+  if (!initialLoadComplete && playersData && propertiesData) {
+    setInitialLoadComplete(true);
+  }
 
   return (
     <DataState
