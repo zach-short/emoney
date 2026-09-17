@@ -802,3 +802,391 @@ func TestEmptyNotification(t *testing.T) {
 		})
 	}
 }
+
+// --- handleKickPlayer ---
+//
+// A kick is the first action in this app that deliberately closes someone
+// else's socket, and the first whose failure mode is "green gates, nobody
+// removed". The rejections below are all of the ones reachable without Mongo -
+// everything that is a fact about the payload rather than about the room - and
+// TestKickRejectsBeforeReadingThePlayer is the guard that keeps them that way.
+// The document-level rules (the target must be in this room and still active,
+// a banker target needs a successor, the successor must be a live player in the
+// same room) cannot be reached here at all: they need a read, and a read is a
+// panic on this machine. They rest on the device walk in PLAN.md's done-when.
+
+// validKickPayload is a KICK_PLAYER payload that gets as far as the first
+// database call. Each test below changes exactly one field. The target is
+// deliberately not testClient()'s own PlayerID, so that a self-kick (D12) is
+// something a test has to opt into rather than something every test does.
+func validKickPayload() map[string]any {
+	return map[string]any{
+		"roomId":         "507f1f77bcf86cd799439011",
+		"targetPlayerId": "507f1f77bcf86cd799439013",
+		"disposition":    "BANK",
+	}
+}
+
+// kickOutcome is bankTransactionOutcome for the kick handler, and it exists for
+// the same reason: config.DB is a nil *mongo.Database in a test binary, so a
+// payload the validation accepts panics at the first config.DB.Collection call
+// rather than returning an error. That panic is the only signal available here
+// that a payload was accepted rather than rejected. If a seam is ever put in
+// front of the target read these tests stop panicking; change the accept tests
+// to assert on the error at that point.
+func kickOutcome(t *testing.T, payload any) (err error, panicked bool) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+		}
+	}()
+	err = NewRoomManager().handleKickPlayer(testClient(), Message{
+		Type:    "KICK_PLAYER",
+		Payload: payload,
+	})
+	return err, false
+}
+
+func TestKickRejectsNonObjectPayload(t *testing.T) {
+	err, _ := kickOutcome(t, "not-an-object")
+	wantErrEqual(t, err, "invalid payload format")
+}
+
+func TestKickRejectsMissingRoomID(t *testing.T) {
+	payload := validKickPayload()
+	delete(payload, "roomId")
+
+	err, _ := kickOutcome(t, payload)
+	wantErrEqual(t, err, "invalid payload: expected string for roomId")
+}
+
+func TestKickRejectsMalformedRoomID(t *testing.T) {
+	payload := validKickPayload()
+	payload["roomId"] = "not-an-object-id"
+
+	err, _ := kickOutcome(t, payload)
+	wantErrContains(t, err, "invalid room ID")
+}
+
+func TestKickRejectsMissingTargetPlayerID(t *testing.T) {
+	payload := validKickPayload()
+	delete(payload, "targetPlayerId")
+
+	err, _ := kickOutcome(t, payload)
+	wantErrEqual(t, err, "invalid payload: expected string for targetPlayerId")
+}
+
+func TestKickRejectsNonStringTargetPlayerID(t *testing.T) {
+	payload := validKickPayload()
+	payload["targetPlayerId"] = 12345
+
+	err, _ := kickOutcome(t, payload)
+	wantErrEqual(t, err, "invalid payload: expected string for targetPlayerId")
+}
+
+func TestKickRejectsMalformedTargetPlayerID(t *testing.T) {
+	payload := validKickPayload()
+	payload["targetPlayerId"] = "507f1f77bcf86cd79943901"
+
+	err, _ := kickOutcome(t, payload)
+	wantErrContains(t, err, "invalid target player ID")
+}
+
+func TestKickRejectsMissingDisposition(t *testing.T) {
+	payload := validKickPayload()
+	delete(payload, "disposition")
+
+	err, _ := kickOutcome(t, payload)
+	wantErrEqual(t, err, "invalid payload: expected string for disposition")
+}
+
+func TestKickRejectsNonStringDisposition(t *testing.T) {
+	payload := validKickPayload()
+	payload["disposition"] = true
+
+	err, _ := kickOutcome(t, payload)
+	wantErrEqual(t, err, "invalid payload: expected string for disposition")
+}
+
+func TestKickRejectsUnrecognizedDisposition(t *testing.T) {
+	// The shape of the bug board item 3 existed for, one handler along: a
+	// switch with no default arm runs the whole transaction doing nothing and
+	// broadcasts an empty notification. Here the equivalent would be worse - a
+	// player marked gone with an estate nobody disposed of.
+	payload := validKickPayload()
+	payload["disposition"] = "BANKK"
+
+	err, panicked := kickOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid disposition: BANKK")
+}
+
+func TestKickRejectsEmptyDisposition(t *testing.T) {
+	payload := validKickPayload()
+	payload["disposition"] = ""
+
+	err, panicked := kickOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid disposition: ")
+}
+
+func TestKickRejectsLowercaseDisposition(t *testing.T) {
+	payload := validKickPayload()
+	payload["disposition"] = "bank"
+
+	err, panicked := kickOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid disposition: bank")
+}
+
+func TestKickRejectsAuctionDispositionUntilItIsBuilt(t *testing.T) {
+	// AUCTION is a real disposition in the design and is a later phase. Until
+	// the auction exists, accepting it would mark a player gone and leave their
+	// estate in limbo - worse than refusing the action.
+	payload := validKickPayload()
+	payload["disposition"] = "AUCTION"
+
+	err, panicked := kickOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected AUCTION to be refused before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid disposition: AUCTION")
+}
+
+func TestKickRejectsNonStringSuccessorPlayerID(t *testing.T) {
+	payload := validKickPayload()
+	payload["successorPlayerId"] = 42
+
+	err, _ := kickOutcome(t, payload)
+	wantErrEqual(t, err, "invalid payload: expected string for successorPlayerId")
+}
+
+func TestKickRejectsMalformedSuccessorPlayerID(t *testing.T) {
+	payload := validKickPayload()
+	payload["successorPlayerId"] = "nope"
+
+	err, _ := kickOutcome(t, payload)
+	wantErrContains(t, err, "invalid successor player ID")
+}
+
+func TestKickRejectsSuccessorEqualToTarget(t *testing.T) {
+	// Promoting the player being removed would leave the room bankerless with
+	// every write reporting success.
+	payload := validKickPayload()
+	payload["successorPlayerId"] = payload["targetPlayerId"]
+
+	err, panicked := kickOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "the successor cannot be the player being removed")
+}
+
+func TestKickRejectsBeforeReadingThePlayer(t *testing.T) {
+	// The point of validating the whole payload above the first database call:
+	// a bad disposition costs no round trip, and - the reason that matters on
+	// this machine - a rejection below the read is not reachable from a test at
+	// all, because config.DB is nil and the read panics. A panic here means the
+	// validation has slipped below the read.
+	payload := validKickPayload()
+	payload["disposition"] = "NOPE"
+
+	_, panicked := kickOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("handleKickPlayer reached the database before validating the payload")
+	}
+}
+
+func TestKickAcceptsBankDisposition(t *testing.T) {
+	payload := validKickPayload()
+	payload["disposition"] = "BANK"
+
+	err, panicked := kickOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected BANK to be accepted and reach the database, got %v", err)
+	}
+}
+
+func TestKickAcceptsFreezeDisposition(t *testing.T) {
+	payload := validKickPayload()
+	payload["disposition"] = "FREEZE"
+
+	err, panicked := kickOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected FREEZE to be accepted and reach the database, got %v", err)
+	}
+}
+
+func TestKickAcceptsANamedSuccessor(t *testing.T) {
+	payload := validKickPayload()
+	payload["successorPlayerId"] = "507f1f77bcf86cd799439014"
+
+	err, panicked := kickOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected a well-formed successor to be accepted and reach the database, got %v", err)
+	}
+}
+
+func TestKickAcceptsAnAbsentSuccessor(t *testing.T) {
+	// successorPlayerId is required only when the target holds the banker role,
+	// which is not knowable without reading them. Its absence must not be a
+	// payload-level rejection.
+	payload := validKickPayload()
+
+	err, panicked := kickOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected a kick with no successor to reach the database, got %v", err)
+	}
+}
+
+func TestKickTreatsEmptySuccessorAsAbsent(t *testing.T) {
+	// A picker with nothing chosen sends "" rather than omitting the key.
+	payload := validKickPayload()
+	payload["successorPlayerId"] = ""
+
+	err, panicked := kickOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected an empty successor to read as absent and reach the database, got %v", err)
+	}
+}
+
+func TestKickTreatsNullSuccessorAsAbsent(t *testing.T) {
+	// JSON null decodes to a nil interface, not to a missing key.
+	payload := validKickPayload()
+	payload["successorPlayerId"] = nil
+
+	err, panicked := kickOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected a null successor to read as absent and reach the database, got %v", err)
+	}
+}
+
+func TestKickAcceptsTheCallerAsTheTarget(t *testing.T) {
+	// A banker kicking themselves is a valid action on the same path, not an
+	// error: it is the only exit a banker has, and without it the only way out
+	// is deleting the whole room.
+	payload := validKickPayload()
+	payload["targetPlayerId"] = testClient().PlayerID
+
+	err, panicked := kickOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected a self-kick to be accepted and reach the database, got %v", err)
+	}
+}
+
+// --- kickNotification ---
+
+func TestKickNotificationBankArm(t *testing.T) {
+	got := kickNotification("Claude", "BANK", "")
+	want := "Banker removed Claude from the game. Their properties returned to the Bank."
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestKickNotificationFreezeArm(t *testing.T) {
+	got := kickNotification("Claude", "FREEZE", "")
+	want := "Banker removed Claude from the game. Their properties stay where they are."
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestKickNotificationAppendsTheSuccession(t *testing.T) {
+	got := kickNotification("Claude", "BANK", "Zach")
+	want := "Banker removed Claude from the game. Their properties returned to the Bank. Zach is now the Banker."
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestKickNotificationSurvivesBroadcastsEmptyGuard(t *testing.T) {
+	// Broadcast drops a payload whose notification is present and empty,
+	// silently to the room and loudly only in the VM's log. A kick that worked
+	// and that nobody saw is indistinguishable from a kick that did nothing, so
+	// every arm - including the unreachable default - has to produce text.
+	for _, disposition := range []string{"BANK", "FREEZE", "AUCTION", ""} {
+		for _, successor := range []string{"", "Zach"} {
+			notification := kickNotification("Claude", disposition, successor)
+			empty, hasField := emptyNotification(map[string]interface{}{
+				"notification": notification,
+				"playerId":     "507f1f77bcf86cd799439013",
+			})
+			if !hasField || empty {
+				t.Fatalf("disposition %q, successor %q: Broadcast would drop %q", disposition, successor, notification)
+			}
+		}
+	}
+}
+
+// --- eventTypeFor ---
+
+func TestKickEventIconIsNotTheBankIcon(t *testing.T) {
+	// The kick's notification has "Banker" as its subject, so an arm added
+	// anywhere below the bank arm would never be reached and the row would be
+	// drawn exactly like a balance change. This is the test that catches a
+	// reorder of that switch.
+	got := eventTypeFor(kickNotification("Claude", "BANK", ""))
+	want := []string{"#dc2626", "\U0001f6ab"}
+
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestKickEventIconHoldsForEveryArmOfTheCopy(t *testing.T) {
+	for _, disposition := range []string{"BANK", "FREEZE"} {
+		for _, successor := range []string{"", "Zach"} {
+			notification := kickNotification("Claude", disposition, successor)
+			if got := eventTypeFor(notification); got[1] != "\U0001f6ab" {
+				t.Fatalf("disposition %q, successor %q: got %v for %q", disposition, successor, got, notification)
+			}
+		}
+	}
+}
+
+func TestEventTypeForLeavesTheExistingArmsAlone(t *testing.T) {
+	// The kick arm is matched first, so every one of these is also a check that
+	// it did not start swallowing rows that are not kicks.
+	cases := []struct {
+		name         string
+		notification string
+		want         []string
+	}{
+		{"banker balance change", "Banker has removed $100 from Claude's balance", []string{"#6366f1", "\U0001f3e6"}},
+		{"purchase", "Claude purchased Boardwalk from the Bank", []string{"#10b981", "\U0001f3e0"}},
+		{"free parking", "Claude added $200 to Free Parking", []string{"#f59e0b", "\U0001f17f️"}},
+		{"transfer", "Claude just sent $50 to Zach for rent", []string{"#3b82f6", "\U0001f4b8"}},
+		{"mortgage", "Claude received $110 for mortgaging property", []string{"#ef4444", "\U0001f4c4"}},
+		{"unrecognized", "something nobody wrote an arm for", []string{"#6b7280", "ℹ️"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := eventTypeFor(tc.notification)
+			if len(got) != len(tc.want) || got[0] != tc.want[0] || got[1] != tc.want[1] {
+				t.Fatalf("eventTypeFor(%q) = %v, want %v", tc.notification, got, tc.want)
+			}
+		})
+	}
+}

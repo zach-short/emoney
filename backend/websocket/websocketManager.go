@@ -50,6 +50,30 @@ func (rm *RoomManager) RemoveClient(client *Client) {
 	}
 }
 
+// SeatClient records which player a connection belongs to, under the same lock
+// that guards the room map.
+//
+// PlayerID and PlayerName are written exactly once per connection, by that
+// connection's own reader goroutine when its JOIN succeeds. Until
+// CloseClientByPlayerID existed nothing else ever read them, and an
+// unsynchronized assignment in handler.go was safe. It is not any more: a kick
+// scans every client in a room for a PlayerID from the *kicking* player's
+// goroutine, and an unsynchronized read of a string against a concurrent write
+// to it is a data race - two words, pointer and length, that the runtime is
+// entitled to let tear. rm.mu already orders "who is in this room"; this puts
+// "who this connection is" under the same lock rather than giving Client a
+// second mutex beside writeMu.
+//
+// The owning goroutine may still read its own client.PlayerID and PlayerName
+// without the lock, because it is the only writer - which is what handler.go's
+// disconnect defer does when it broadcasts PLAYER_LEFT.
+func (rm *RoomManager) SeatClient(client *Client, playerID, playerName string) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	client.PlayerID = playerID
+	client.PlayerName = playerName
+}
+
 // Broadcast is the single fan-out point for every room message. It refuses to
 // send a message whose "notification" field is present but empty (or present
 // and not a string). Every websocket money handler in this package builds a
@@ -116,6 +140,57 @@ func (rm *RoomManager) Broadcast(room string, message Message) {
 			delete(clients, client)
 		}
 	}
+}
+
+// CloseClientByPlayerID force-closes every live connection in room that is
+// seated as playerID, and reports how many it closed. It is what makes a kick
+// actually remove someone: the kicked browser reconnects a second after any
+// close and re-sends JOIN, which handler.go now refuses for an inactive player.
+//
+// It deliberately does not touch rm.clients. Each connection already has its
+// own cleanup - handler.go's per-connection defer calls RemoveClient, which
+// takes rm.mu.Lock(), and broadcasts PLAYER_LEFT once the closed conn makes
+// that goroutine's blocked ReadJSON error and break. Removing the client here
+// as well would either double-broadcast PLAYER_LEFT or take rm.mu a second
+// time from a goroutine that is already inside it. Closing the conn is what
+// makes that existing cleanup run; it is not a second copy of it.
+//
+// The conns are collected under the read lock and closed after it is released.
+// Only the scan needs the lock, and keeping a syscall out from under the hub
+// lock means a later edit inside that loop cannot reach back into rm.mu and
+// deadlock against the RemoveClient it is about to provoke. A *Client
+// collected here stays a valid pointer even if its own goroutine removes it
+// from the map first; the worst case is Close on an already-closed conn, which
+// returns an error nobody needs.
+//
+// Close, not WriteJSON: a close is not a write, so it takes no writeMu (see
+// the Client doc comment in types.go) and there is no ordering between writeMu
+// and rm.mu to get wrong here. gorilla's underlying net.Conn.Close is safe to
+// call while the owning goroutine is blocked in Read, which is the whole
+// mechanism this depends on.
+func (rm *RoomManager) CloseClientByPlayerID(room, playerID string) int {
+	if playerID == "" {
+		// Every connection carries PlayerID "" from the upgrade until its JOIN
+		// succeeds, so matching on it would close every unseated conn in the
+		// room. There is no player whose id is the empty string.
+		return 0
+	}
+
+	var targets []*Client
+
+	rm.mu.RLock()
+	for client := range rm.clients[room] {
+		if client.PlayerID == playerID {
+			targets = append(targets, client)
+		}
+	}
+	rm.mu.RUnlock()
+
+	for _, client := range targets {
+		client.Conn.Close()
+	}
+
+	return len(targets)
 }
 
 // emptyNotification reports whether payload carries a "notification" field
@@ -690,25 +765,320 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 	return nil
 }
 
-func (rm *RoomManager) CreateEventHistory(notification string, roomId primitive.ObjectID) error {
-	var eventType []string
-
-	switch {
-	case strings.Contains(notification, "purchased"), strings.Contains(notification, "selling"):
-		eventType = []string{"#10b981", "🏠"}
-	case strings.Contains(notification, "Free Parking"):
-		eventType = []string{"#f59e0b", "🅿️"}
-	case strings.Contains(notification, "sent"):
-		eventType = []string{"#3b82f6", "💸"}
-	case strings.Contains(notification, "Banker"):
-		eventType = []string{"#6366f1", "🏦"}
-	case strings.Contains(notification, "mortgag"):
-		eventType = []string{"#ef4444", "📄"}
-	case strings.Contains(notification, "house") || strings.Contains(notification, "hotels"):
-		eventType = []string{"#8b5cf6", "🏗️"}
-	default:
-		eventType = []string{"#6b7280", "ℹ️"}
+// handleKickPlayer removes a player from a live game. One banker action does
+// four things: it disposes of the estate the way the banker chose, marks the
+// player gone, hands the banker role on if the target held it, and force-closes
+// the target's socket.
+//
+// The decisions this implements, so a later reader does not re-derive them from
+// the code (docs/incomplete/kick-player/DESIGN.md):
+//
+//   - D10 - the cash write is *none*. The balance stays exactly as it is on the
+//     document marked inactive. It is not credited to the room, and it does not
+//     touch Room.freeParking, which already means something else. This is the
+//     easiest decision in the feature to "improve" by accident.
+//   - D11 - the player is marked isActive:false, never deleted. Freeze needs the
+//     document so Property.playerId still resolves to a name, and every past
+//     EventHistory row keeps meaning something.
+//   - D12 - a banker may kick themselves. targetPlayerId equal to the caller is
+//     a valid action on the same path, not an error.
+//   - D13 - a deed going back to the bank is razed on the way.
+//
+// Everything above the first Mongo call is payload shape, and it is above it on
+// purpose: config.DB is a nil *mongo.Database in a test binary, so a rejection
+// that happens after the first read is not reachable from a test on this
+// machine at all. TestKickRejectsBeforeReadingThePlayer is the guard on that
+// ordering.
+func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
+	payload, ok := message.Payload.(map[string]interface{})
+	if !ok {
+		return errors.New("invalid payload format")
 	}
+
+	roomIdStr, ok := payload["roomId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for roomId")
+	}
+	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid room ID: %w", err)
+	}
+
+	targetIdStr, ok := payload["targetPlayerId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for targetPlayerId")
+	}
+	targetObjID, err := primitive.ObjectIDFromHex(targetIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid target player ID: %w", err)
+	}
+
+	disposition, ok := payload["disposition"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for disposition")
+	}
+	// Validated here rather than at the write, for the same two reasons
+	// handleBankTransaction hoists its transactionType switch: an unrecognized
+	// value costs no database round trip, and the rejection is reachable in a
+	// test. AUCTION is a real disposition in the design (D2) and is Phase 3;
+	// until it exists it must be refused here rather than fall through to a
+	// kick that disposes of nothing.
+	switch disposition {
+	case "BANK", "FREEZE":
+		// valid - the transaction below switches on these same two values
+	default:
+		return fmt.Errorf("invalid disposition: %s", disposition)
+	}
+
+	// successorPlayerId is optional on the wire because it is required only
+	// when the target holds the banker role (D5), and whether they do is not
+	// knowable without reading them. Absent, null and "" all mean "no successor
+	// named"; anything else has to be a well-formed id, checked here so a
+	// malformed one is refused before the first Mongo call rather than after.
+	var successorObjID primitive.ObjectID
+	hasSuccessor := false
+	if raw, present := payload["successorPlayerId"]; present && raw != nil {
+		successorIdStr, ok := raw.(string)
+		if !ok {
+			return errors.New("invalid payload: expected string for successorPlayerId")
+		}
+		if successorIdStr != "" {
+			successorObjID, err = primitive.ObjectIDFromHex(successorIdStr)
+			if err != nil {
+				return fmt.Errorf("invalid successor player ID: %w", err)
+			}
+			if successorObjID == targetObjID {
+				return errors.New("the successor cannot be the player being removed")
+			}
+			hasSuccessor = true
+		}
+	}
+
+	// --- the first database call. Nothing below here is reachable from a test
+	// on a machine with no Mongo; it panics on the nil config.DB instead. ---
+
+	playerColl := config.DB.Collection("Player")
+
+	// Scoped to the room and to active players rather than going through
+	// controllers.GetPlayer, which filters on _id alone: a kick must not reach
+	// across rooms, and kicking an already-kicked player should say so rather
+	// than silently re-run the estate write.
+	var target models.Player
+	err = playerColl.FindOne(context.Background(), bson.M{
+		"_id":      targetObjID,
+		"roomId":   roomObjID,
+		"isActive": true,
+	}).Decode(&target)
+	if err != nil {
+		return fmt.Errorf("failed to find the player to remove: %w", err)
+	}
+
+	var successor models.Player
+	switch {
+	case target.IsBanker && !hasSuccessor:
+		// D5: the room may never be left bankerless. Every banker control in
+		// the product is gated on the client's own isBanker, so a bankerless
+		// room loses the balance controls from every screen, permanently.
+		return errors.New("removing the banker requires naming a successor")
+	case !target.IsBanker && hasSuccessor:
+		// The client thinks this player is the banker and the database
+		// disagrees - a stale view, most likely because the role moved since
+		// the screen was drawn. Promoting anyway would leave two bankers, and
+		// nothing in this app rejects that state. Zach's call, 2026-09-17:
+		// refuse loudly rather than drop the promotion silently, because a
+		// silently-skipped write here is indistinguishable from success.
+		return fmt.Errorf("%s is not the banker, so there is no banker role to hand on", target.Name)
+	case hasSuccessor:
+		err = playerColl.FindOne(context.Background(), bson.M{
+			"_id":      successorObjID,
+			"roomId":   roomObjID,
+			"isActive": true,
+		}).Decode(&successor)
+		if err != nil {
+			return fmt.Errorf("failed to find the successor: %w", err)
+		}
+	}
+
+	notification := kickNotification(target.Name, disposition, successor.Name)
+
+	// One transaction, following freeParking above - the only other
+	// multi-document write in this app - and deliberately not
+	// controllers.PurchaseProperty, which is two bare writes with no session.
+	// A kick that demotes the old banker and then fails to promote the new one
+	// leaves the room bankerless; one that promotes and fails to demote leaves
+	// two bankers. Neither half may land alone.
+	session, err := config.DB.Client().StartSession()
+	if err != nil {
+		return fmt.Errorf("failed to start session: %w", err)
+	}
+	defer session.EndSession(context.Background())
+
+	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+		if disposition == "BANK" {
+			// manager.HandlePropertySaleMortgage's SELL case at
+			// manager/propertyManager.go:53 writes {playerId: nil,
+			// isMortgaged: false} and leaves developmentLevel alone. This
+			// write is that one plus developmentLevel: 0, and the difference
+			// is deliberate (D13), not drift: GetAvailableProperties filters
+			// on playerId being nil, so without the raze a returned
+			// hotel-bearing deed reappears in Bank's Properties at its face
+			// price and the next buyer inherits the development for free.
+			// SELL is left alone on purpose - fixing it would change
+			// behaviour outside this feature.
+			//
+			// The mortgage clearing is not a choice made here: it is what
+			// SELL does, and it is right, because the mortgage is a debt to
+			// the bank and the bank now holds the deed (D3).
+			_, err := config.DB.Collection("Property").UpdateMany(
+				ctx,
+				bson.M{"roomId": roomObjID, "playerId": targetObjID},
+				bson.M{"$set": bson.M{
+					"playerId":         nil,
+					"isMortgaged":      false,
+					"developmentLevel": 0,
+				}},
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to return the properties to the bank: %w", err)
+			}
+		}
+		// FREEZE writes nothing to any property (D4). The deeds stay against
+		// the player, houses intact, which is why the document has to survive.
+
+		// isBanker:false alongside isActive:false is a no-op for a player who
+		// was not the banker, and is the demotion half of the succession for
+		// one who was. Filtered on isActive:true so a second kick racing this
+		// one matches nothing and aborts the transaction instead of running
+		// the estate write twice.
+		result, err := playerColl.UpdateOne(
+			ctx,
+			bson.M{"_id": targetObjID, "roomId": roomObjID, "isActive": true},
+			bson.M{"$set": bson.M{"isActive": false, "isBanker": false}},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to remove the player: %w", err)
+		}
+		if result.MatchedCount == 0 {
+			return nil, errors.New("that player has already been removed")
+		}
+
+		if hasSuccessor {
+			result, err := playerColl.UpdateOne(
+				ctx,
+				bson.M{"_id": successorObjID, "roomId": roomObjID, "isActive": true},
+				bson.M{"$set": bson.M{"isBanker": true}},
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to promote the successor: %w", err)
+			}
+			if result.MatchedCount == 0 {
+				return nil, errors.New("the successor is no longer in this room")
+			}
+		}
+
+		return nil, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("transaction failed: %w", err)
+	}
+
+	rm.CreateEventHistory(notification, roomObjID)
+
+	// Broadcast before the close, not after. The close makes the target's own
+	// goroutine broadcast PLAYER_LEFT on its way out; sending PLAYER_KICKED
+	// first means every other client refetches against a room that is already
+	// written, rather than racing the two messages. The kicked player is told
+	// nothing either way (D6) - they are simply gone.
+	rm.Broadcast(client.Room, Message{
+		Type: "PLAYER_KICKED",
+		Payload: map[string]interface{}{
+			"notification": notification,
+			"playerId":     targetIdStr,
+		},
+	})
+
+	closed := rm.CloseClientByPlayerID(client.Room, targetIdStr)
+	log.Printf("Kick complete in room %s: removed player %s, closed %d connection(s)", client.Room, targetIdStr, closed)
+
+	return nil
+}
+
+// kickNotification builds the one string every client in the room toasts and
+// the one CreateEventHistory stores.
+//
+// The register is the banker as subject, matching handleBankTransaction's
+// "Banker has removed $100 from X's balance", which is the nearest existing
+// line. Chosen by Zach 2026-09-17 over a passive form and a terser
+// table-voice one.
+//
+// Every arm returns text, including the unreachable default: Broadcast refuses
+// a payload whose notification is present and empty, so an arm that forgot to
+// set one would be dropped silently to the room and logged only on the VM -
+// a kick that worked and that nobody saw, which looks exactly like a kick that
+// did nothing. The phrase "from the game" is load-bearing beyond the copy: it
+// is what eventTypeFor keys the kick's icon on.
+func kickNotification(targetName, disposition, successorName string) string {
+	var text string
+
+	switch disposition {
+	case "BANK":
+		text = fmt.Sprintf("Banker removed %s from the game. Their properties returned to the Bank.", targetName)
+	case "FREEZE":
+		text = fmt.Sprintf("Banker removed %s from the game. Their properties stay where they are.", targetName)
+	default:
+		// Unreachable: disposition is validated in handleKickPlayer before any
+		// read. Kept so this switch can never fall through with text unset.
+		text = fmt.Sprintf("Banker removed %s from the game.", targetName)
+	}
+
+	if successorName != "" {
+		text += fmt.Sprintf(" %s is now the Banker.", successorName)
+	}
+
+	return text
+}
+
+// eventTypeFor picks the {colour, emoji} pair an event-history row is drawn
+// with, by matching substrings of the notification prose. It is a separate
+// function from CreateEventHistory only so that it can be tested:
+// CreateEventHistory ends in an InsertOne, so calling it in a test binary
+// panics on the nil config.DB before anything about the classification can be
+// observed.
+//
+// Prose matching makes the arms order-dependent, and that is a real hazard
+// rather than a stylistic one - see the kick arm's comment.
+func eventTypeFor(notification string) []string {
+	switch {
+	// First, deliberately. This notification has "Banker" as its subject, so
+	// left further down it would fall into the bank arm by substring and be
+	// drawn identically to a balance change - which is the outcome
+	// PLAN.md's icon dial exists to avoid. "removed" alone is not a safe key
+	// either: handleBankTransaction writes "Banker has removed $100 from X's
+	// balance". "from the game" is the phrase that distinguishes them. If the
+	// kick copy in kickNotification changes, this key changes with it.
+	case strings.Contains(notification, "from the game"):
+		return []string{"#dc2626", "🚫"}
+	case strings.Contains(notification, "purchased"), strings.Contains(notification, "selling"):
+		return []string{"#10b981", "🏠"}
+	case strings.Contains(notification, "Free Parking"):
+		return []string{"#f59e0b", "🅿️"}
+	case strings.Contains(notification, "sent"):
+		return []string{"#3b82f6", "💸"}
+	case strings.Contains(notification, "Banker"):
+		return []string{"#6366f1", "🏦"}
+	case strings.Contains(notification, "mortgag"):
+		return []string{"#ef4444", "📄"}
+	case strings.Contains(notification, "house") || strings.Contains(notification, "hotels"):
+		return []string{"#8b5cf6", "🏗️"}
+	default:
+		return []string{"#6b7280", "ℹ️"}
+	}
+}
+
+func (rm *RoomManager) CreateEventHistory(notification string, roomId primitive.ObjectID) error {
+	eventType := eventTypeFor(notification)
+
 	eventHistory := models.EventHistory{
 		ID:        primitive.NewObjectID(),
 		TimeStamp: time.Now(),

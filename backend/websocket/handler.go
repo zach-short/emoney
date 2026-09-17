@@ -73,8 +73,6 @@ func HandleWebSocket(c *gin.Context) {
 		case "JOIN":
 			if payload, ok := message.Payload.(map[string]interface{}); ok {
 				if playerId, ok := payload["playerId"].(string); ok {
-					client.PlayerID = playerId
-
 					playerObjID, err := primitive.ObjectIDFromHex(playerId)
 					if err != nil {
 						log.Printf("Error converting player ID: %v", err)
@@ -87,7 +85,28 @@ func HandleWebSocket(c *gin.Context) {
 						continue
 					}
 
-					client.PlayerName = player.Name
+					// A kicked player is marked isActive:false, not deleted, so
+					// this read still succeeds for them. Refusing here is what
+					// stops the kicked browser's one-second reconnect
+					// (frontend/app/room/[code]/page.tsx:219-223) from re-seating
+					// them: without it the kick is a no-op with green gates -
+					// the room is written correctly and the player walks back in
+					// a second later. The other way back in is the Join screen,
+					// which goes through GetPlayerDetails and is already bolted
+					// (controllers/playerControllers.go).
+					//
+					// Nothing is sent back and the socket is left open: the
+					// kicked player is told nothing (design D6), and their own
+					// room fetch failing is what their client reacts to.
+					if !player.IsActive {
+						log.Printf("JOIN refused for removed player %s in room %s", playerId, roomCode)
+						continue
+					}
+
+					// Seated through the manager rather than assigned directly:
+					// CloseClientByPlayerID scans these fields from another
+					// player's goroutine. See SeatClient in websocketManager.go.
+					Manager.SeatClient(client, playerId, player.Name)
 
 					Manager.Broadcast(roomCode, Message{
 						Type: "PLAYER_JOINED",
@@ -134,6 +153,13 @@ func HandleWebSocket(c *gin.Context) {
 			}
 		case "MANAGE_PROPERTIES":
 			if err := Manager.handleManageProperties(client, message); err != nil {
+				client.WriteJSON(Message{
+					Type:    "ERROR",
+					Payload: err.Error(),
+				})
+			}
+		case "KICK_PLAYER":
+			if err := Manager.handleKickPlayer(client, message); err != nil {
 				client.WriteJSON(Message{
 					Type:    "ERROR",
 					Payload: err.Error(),
