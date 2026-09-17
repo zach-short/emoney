@@ -47,9 +47,14 @@ const JoinRoomForm = () => {
 
   const { execute: checkPlayerExecute, loading: checkingPlayer } =
     usePublicAction(playerApi.getDetails, {
-      onSuccess(data: { isValid: boolean }) {
-        if (data.isValid) {
-          router.push(`/rooms/${formData.roomCode}`);
+      // GET /rooms/:code/players/:playerId answers { player, properties } --
+      // there is no `isValid` flag, so the old check read undefined and this
+      // branch never fired. Every returning player was sent to the
+      // create-a-player form, where the backend then refused them with "Name
+      // or color already taken": there was no way back into your own game.
+      onSuccess(data: { player?: { id?: string } }) {
+        if (data?.player?.id) {
+          router.push(`/room/${formData.roomCode}`);
         } else {
           setStep(STEP.PLAYER_DETAILS);
         }

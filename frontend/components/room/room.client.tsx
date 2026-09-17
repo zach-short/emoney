@@ -77,7 +77,6 @@ const RoomView = ({
             onPurchaseProperty={onPurchaseProperty}
             onFreeParkingAction={onFreeParkingAction}
             roomCode={room?.code}
-            roomId={room?.id}
           />
         </div>
       </header>

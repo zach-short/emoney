@@ -30,14 +30,12 @@ const Navbar = ({
   eventHistory,
   availableProperties,
   onFreeParkingAction,
-  roomId,
   roomCode,
   onPurchaseProperty,
 }: {
   freeParking: number;
   roomCode: string;
   eventHistory: EventHistory[];
-  roomId: string;
   player: Player;
   onPurchaseProperty: (
     propertyId: string,
@@ -214,7 +212,10 @@ const Navbar = ({
                         href={`/`}
                         className={`  p-2 border rounded-sm w-full text-lg border-red-300`}
                         onClick={() => {
-                          playerStore.clearPlayerDataForRoom(roomId);
+                          // playerStore keys by room CODE (`room_<code>_playerId`).
+                          // Passing roomId cleared nothing, so "Delete My Player"
+                          // left you rejoining as the same player.
+                          playerStore.clearPlayerDataForRoom(roomCode);
                         }}
                       >
                         Delete My Player this Game

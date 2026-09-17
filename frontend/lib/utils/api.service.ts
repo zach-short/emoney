@@ -3,7 +3,6 @@ import API from "./api";
 const handleApiResponse = (promise: any) => {
   return promise
     .then((response: any) => {
-      console.log(`🟢 API call succeeded with status ${response.status}`);
       return {
         success: true,
         data: response.data,
@@ -12,10 +11,6 @@ const handleApiResponse = (promise: any) => {
     })
     .catch((error: any) => {
       if (error.message === "Network Error") {
-        console.log(
-          "LOG  ❌ Error response: Network connectivity issue - user is offline",
-        );
-
         return {
           success: false,
           error: { message: "You're offline. Please check your connection." },
@@ -24,7 +19,6 @@ const handleApiResponse = (promise: any) => {
         };
       }
 
-      console.error(`🔴 API call failed: ${error.message}`);
       return {
         success: false,
         error: error.response?.data || { message: error.message },
