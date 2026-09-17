@@ -240,6 +240,33 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 	if err != nil {
 		return fmt.Errorf("invalid amount: %w", err)
 	}
+	if amount < 1 {
+		// strconv.Atoi parses "-100", and controllers.PlayerTransfer builds its
+		// two $inc updates with the signs fixed by the direction rather than by
+		// the amount - -transfer.Amount off the sender, +transfer.Amount onto
+		// the recipient. So a SEND of -100 credits the sender $100 and debits
+		// the recipient $100: a transfer that runs backwards, asked for by the
+		// player it pays. Every route here is unauthenticated, so the only
+		// credential that stands between a room and that frame is the room code.
+		//
+		// Unlike handleManageProperties, which reads a negative as SELL and
+		// takes the absolute value (:774), nothing on this path gives the sign
+		// a meaning: TRANSFER carries its direction in transferType. There is
+		// no frame this rejects that used to do something legitimate.
+		//
+		// Rejected here rather than in the controller for the same reason the
+		// free parking floor is: it is a fact about the payload, independent of
+		// any state, so it costs no round trip and stays reachable from a test
+		// (config.DB is nil in a test binary, so anything past the switch
+		// panics instead of erroring). PlayerTransfer keeps its own copy of
+		// this rule anyway - see transferRejection - because it is exported and
+		// this handler is not the only caller it could ever have.
+		//
+		// $0 is refused with the negatives, same as free parking and a bid: it
+		// moves nothing, but it still writes a Transfer row and toasts the whole
+		// room about money that did not go anywhere.
+		return errors.New("a transfer has to be at least $1")
+	}
 
 	roomIdStr, ok := payload["roomId"].(string)
 	if !ok {
@@ -326,6 +353,28 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 		},
 	})
 
+	return nil
+}
+
+// freeParkingRejection is board row 16's decision at the Free Parking pot: a
+// removed player may not move money. Both arms of this handler are the actor
+// acting on their own balance - ADD pays into the pot out of their own money,
+// REMOVE takes the pot into it - so the player named in the payload is the one
+// moving the money and this is the "may not act" half of the rule. There is no
+// second question here about who is being acted upon; the pot is not a player.
+//
+// Pure, and taking a player already read rather than reading one itself, for
+// the reason transferRejection gives (controllers/transferControllers.go):
+// config.DB is a nil *mongo.Database in a test binary, so a rule written inline
+// inside the transaction below is a rule no test on this machine can reach.
+//
+// The amount floor is deliberately not here. It is a fact about the payload, so
+// it sits above the first database call where it costs no round trip; this
+// function only decides what the player document says.
+func freeParkingRejection(player models.Player) error {
+	if !player.IsActive {
+		return errors.New("a removed player cannot use free parking")
+	}
 	return nil
 }
 
@@ -435,17 +484,22 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 		// floor is only a floor if the number it reads comes from the same
 		// snapshot as the write it guards.
 		//
-		// Filtered on _id alone, which is exactly what controllers.GetPlayer
-		// did - no roomId and no isActive. That is deliberate: this is an
-		// existing read moved into the transaction, not a new one, and adding
-		// either clause would silently change who may touch Free Parking.
-		// Whether a frozen player should be refused here is a real question and
-		// it is raised on the board, not folded into this fix (invariant 6,
-		// which requires every new read of Player to decide about isActive -
-		// this one decides to keep the read exactly as it was).
+		// Still filtered on _id alone - no roomId and no isActive - and that
+		// is now a different decision than it was when row 13 moved this read
+		// in. It used to mean "this read is unchanged, and whether a frozen
+		// player is refused is raised on the board rather than answered here".
+		// Row 16 answered it (no, they may not), and row 19 applies that
+		// answer, so the question is settled - but the filter stays exactly as
+		// it was, because the rule belongs in freeParkingRejection and not in
+		// the query. An isActive clause here would turn a refusal into "failed
+		// to get player details", which tells the player nothing and is the
+		// distinction handleCloseAuction's winner read already draws.
 		var player models.Player
 		if err := config.DB.Collection("Player").FindOne(ctx, bson.M{"_id": playerObjID}).Decode(&player); err != nil {
 			return nil, fmt.Errorf("failed to get player details: %w", err)
+		}
+		if err := freeParkingRejection(player); err != nil {
+			return nil, err
 		}
 
 		switch actionType {
@@ -538,6 +592,26 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	return nil
 }
 
+// propertyPurchaseRejection is board row 16's decision at a purchase from the
+// Bank. The buyer is the actor - they are spending their own balance on a deed
+// - so this is the same "a frozen player may not act" half of the rule as
+// freeParkingRejection and managePropertiesRejection, and not the banker
+// question that bankTransactionRejection answers.
+//
+// It refuses the frozen buyer and nothing else, deliberately. This handler has
+// no balance floor and no price floor of any kind: controllers.PurchaseProperty
+// is two bare writes with no session and no read, and the price arrives as a
+// payload float, so a negative price credits the buyer AND hands them the deed.
+// That is a real hole of the same family as board rows 13, 14 and 15, and it is
+// raised as its own row rather than folded in here, where it would hide in this
+// diff and in its review.
+func propertyPurchaseRejection(buyer models.Player) error {
+	if !buyer.IsActive {
+		return errors.New("a removed player cannot buy property")
+	}
+	return nil
+}
+
 func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) error {
 	payload, ok := message.Payload.(map[string]interface{})
 	if !ok {
@@ -574,6 +648,9 @@ func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) e
 		log.Printf("Failed to get property or buyer details: %v", err)
 		return err
 	}
+	if err := propertyPurchaseRejection(*buyer); err != nil {
+		return err
+	}
 
 	purchaseErr := controllers.PurchaseProperty(propertyID, buyerID, price)
 	if purchaseErr != nil {
@@ -590,6 +667,34 @@ func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) e
 		},
 	})
 
+	return nil
+}
+
+// bankTransactionRejection is board row 16's decision at the banker's balance
+// control, and this is the one site of the four where the frozen player is the
+// TARGET rather than the actor: handleBankTransaction never reads who is
+// acting, only who is being paid or charged. So the question it answers is not
+// "may a frozen player act" but "may a banker act on a frozen player", and
+// Zach's answer, 2026-09-17, is no.
+//
+// The reasoning, because it is a build-level call and a later reader should not
+// have to re-derive it. There is no un-kick in this product: a removed player's
+// estate has already been auctioned and their balance has already left the
+// game, so the write changes a number nobody can ever spend while the broadcast
+// tells the whole room "Banker has added $100 to X's balance" - a sentence
+// about a consequence that does not exist. It also squares this handler with
+// transferRejection, which has refused paying a frozen player since row 14
+// (controllers/transferControllers.go): without this, a transfer into that
+// document is refused and a banker add to it is not.
+//
+// To reverse it, delete this function and its call. The actor half of the rule
+// at the other three sites stands on its own and does not depend on it.
+func bankTransactionRejection(target models.Player) error {
+	if !target.IsActive {
+		// Deliberately the same sentence transferRejection's recipient arm
+		// says, because it is the same situation reached by another route.
+		return errors.New("that player has been removed from the game")
+	}
 	return nil
 }
 
@@ -647,6 +752,9 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 	if err != nil {
 		return fmt.Errorf("failed to get target player details: %w", err)
 	}
+	if err := bankTransactionRejection(*targetPlayer); err != nil {
+		return err
+	}
 
 	err = controllers.UpdatePlayerBalanceByBanker(roomID, targetPlayerID, amount, isAdd)
 	if err != nil {
@@ -678,6 +786,24 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 		},
 	})
 
+	return nil
+}
+
+// managePropertiesRejection is board row 16's decision at property management.
+// The player named in the payload is the actor - they are mortgaging,
+// unmortgaging, developing or selling development on their own deeds - so this
+// is the same "a frozen player may not act" half of the rule as
+// freeParkingRejection and propertyPurchaseRejection.
+//
+// Nothing here looks at the amount, and that is deliberate rather than an
+// omission. handleManageProperties treats a negative amount as MEANINGFUL: it
+// is what flips HOUSES to SELL below, so the amount < 1 floor the other money
+// handlers carry would break this handler rather than fix it. The hazard is not
+// uniform across these four sites and this one is the exception.
+func managePropertiesRejection(player models.Player) error {
+	if !player.IsActive {
+		return errors.New("a removed player cannot manage properties")
+	}
 	return nil
 }
 
@@ -734,12 +860,61 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 		return errors.New("invalid payload: expected string for managementType")
 	}
 
+	// Validated here, above the first database call, for the two reasons
+	// freeParking and handleBankTransaction hoist their own switches: an
+	// unrecognized value costs no round trip, and the rejection stays reachable
+	// from a test. This switch IS the work switch's old default arm, moved up.
+	// It had to move when the player read went above that switch, because
+	// otherwise an invalid managementType would panic on the nil config.DB
+	// before it could ever be named.
+	switch manageType {
+	case "HOUSES", "MORTGAGE", "UNMORTGAGE", "SELL":
+		// valid - the work switch below dispatches on these same four values
+	default:
+		return fmt.Errorf("invalid management type: %s", manageType)
+	}
+
+	// --- the first database call. Nothing below here is reachable from a test
+	// on a machine with no Mongo; it panics on the nil config.DB instead. ---
+
+	// The player is read HERE, above every write, and that placement is the
+	// point of the read rather than an accident of it. Until 2026-09-17 the
+	// only read of this player was at the BOTTOM of the handler - after
+	// manager.HandleHouseManagement had already rewritten the deeds and
+	// manager.UpdatePlayerBalance had already moved the money - and it existed
+	// only to put a name in the notification. A rule checked down there would
+	// refuse nothing: it would report an error to a player whose houses were
+	// already sold and whose balance was already credited for selling them.
+	//
+	// This read replaces that one. The block it replaced re-parsed the same
+	// payload["playerId"] a second time under the name toPlayerId, and its
+	// three error strings were already unreachable, because the parse at the
+	// top of this handler had to succeed on that same field to get here.
+	//
+	// Filtered on _id alone, which is what controllers.GetPlayer does
+	// (controllers/playerControllers.go:166), and left that way on purpose: the
+	// rule belongs in managePropertiesRejection and not in the query, so that a
+	// removed player gets a sentence about being removed rather than "failed to
+	// get player details". Invariant 6 requires every read of Player to decide
+	// about isActive; this one keeps the filter and answers it on the next line.
+	player, err := controllers.GetPlayer(playerID)
+	if err != nil {
+		return fmt.Errorf("failed to get player details: %w", err)
+	}
+	if err := managePropertiesRejection(*player); err != nil {
+		return err
+	}
+
 	switch manageType {
 	case "HOUSES":
 		err = manager.HandleHouseManagement(roomObjID, manageType, properties)
 	case "MORTGAGE", "UNMORTGAGE", "SELL":
 		err = manager.HandlePropertySaleMortgage(roomObjID, manageType, properties)
 	default:
+		// Unreachable: manageType was validated above. Kept so this switch
+		// cannot fall through with err still nil and no work done, which would
+		// then credit or debit the balance below for a change that never
+		// happened.
 		return fmt.Errorf("invalid management type: %s", manageType)
 	}
 
@@ -750,26 +925,6 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 	err = manager.UpdatePlayerBalance(playerID, amount)
 	if err != nil {
 		return err
-	}
-
-	idValue, ok := payload["playerId"]
-	if !ok || idValue == nil {
-		return fmt.Errorf("toPlayerId is missing or nil")
-	}
-
-	idStr, ok := idValue.(string)
-	if !ok {
-		return fmt.Errorf("toPlayerId is not a string")
-	}
-
-	targetPlayerID, err := primitive.ObjectIDFromHex(idStr)
-	if err != nil {
-		return fmt.Errorf("invalid target player ID: %w", err)
-	}
-
-	targetPlayer, err := controllers.GetPlayer(targetPlayerID)
-	if err != nil {
-		return fmt.Errorf("failed to get target player details: %w", err)
 	}
 
 	absAmount := amount
@@ -811,7 +966,7 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 	}
 
 	notification := fmt.Sprintf("%s %s $%d %s %s",
-		targetPlayer.Name,
+		player.Name,
 		action,
 		absAmount,
 		preposition,

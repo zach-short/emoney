@@ -3,8 +3,11 @@ package websocket
 import (
 	"bytes"
 	"log"
+	"runtime/debug"
 	"strings"
 	"testing"
+
+	"github.com/zachmshort/emoney-backend/models"
 )
 
 // These tests cover the rejection branches of the websocket money handlers -
@@ -279,6 +282,86 @@ func TestTransferRejectsMalformedToPlayerID(t *testing.T) {
 	err := transferErr(t, payload)
 
 	wantErrContains(t, err, "invalid toPlayerId")
+}
+
+// transferOutcome is freeParkingOutcome for the transfer handler, and it exists
+// for the same reason: config.DB is a nil *mongo.Database in a test binary, so
+// a SEND the amount floor accepts panics inside controllers.PlayerTransfer
+// rather than erroring. That panic is the only signal available here that a
+// payload was accepted rather than rejected, which is what makes the "not
+// panicked" half of the assertions below meaningful - without it a test cannot
+// tell a rejection from a value that sailed through into Mongo.
+func transferOutcome(t *testing.T, payload any) (err error, panicked bool) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+		}
+	}()
+	err = NewRoomManager().handleTransfer(testClient(), Message{
+		Type:    "TRANSFER",
+		Payload: payload,
+	})
+	return err, false
+}
+
+// --- the transfer amount floor (board row 14) ---
+//
+// strconv.Atoi parses "-100" and PlayerTransfer's two $inc updates take their
+// signs from the direction rather than from the amount, so before 2026-09-17 a
+// negative SEND ran the transfer backwards: the sender was credited and the
+// recipient debited, on an unauthenticated route, by one frame. These three
+// pin the floor and where it sits.
+
+func TestTransferRejectsNegativeSend(t *testing.T) {
+	// The exploit as row 14 states it. Both player ids are valid here on
+	// purpose: without the floor this payload reaches
+	// controllers.PlayerTransfer and panics on the nil config.DB, so the
+	// "not panicked" check is what proves the floor rejected it rather than
+	// something further down.
+	payload := validTransferPayload()
+	payload["amount"] = "-100"
+	payload["fromPlayerId"] = "507f1f77bcf86cd799439012"
+	payload["toPlayerId"] = "507f1f77bcf86cd799439013"
+
+	err, panicked := transferOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a transfer has to be at least $1")
+}
+
+func TestTransferRejectsZeroAmount(t *testing.T) {
+	// $0 moves no money, so it is a noise bug rather than a money one: it
+	// writes a Transfer row and toasts the whole room about a payment that did
+	// not happen. Refused with the negatives, same as free parking and a bid.
+	payload := validTransferPayload()
+	payload["amount"] = "0"
+	payload["fromPlayerId"] = "507f1f77bcf86cd799439012"
+	payload["toPlayerId"] = "507f1f77bcf86cd799439013"
+
+	err, panicked := transferOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a transfer has to be at least $1")
+}
+
+func TestTransferChecksTheAmountBeforeTheTransferType(t *testing.T) {
+	// A mutation check on placement, not on behaviour. The floor sits directly
+	// under the Atoi, above the transferType switch - so a payload that is
+	// wrong in both ways reports the amount. Move the floor below the switch
+	// and this test reports "invalid transfer type: SENT" instead; move it into
+	// PlayerTransfer and the two tests above panic on the nil config.DB.
+	payload := validTransferPayload()
+	payload["amount"] = "-100"
+	payload["transferType"] = "SENT"
+
+	err, _ := transferOutcome(t, payload)
+
+	wantErrEqual(t, err, "a transfer has to be at least $1")
 }
 
 // --- handleBankTransaction ---
@@ -1293,5 +1376,201 @@ func TestEventTypeForLeavesTheExistingArmsAlone(t *testing.T) {
 				t.Fatalf("eventTypeFor(%q) = %v, want %v", tc.notification, got, tc.want)
 			}
 		})
+	}
+}
+
+// --- board row 19: a frozen player may not move money, at every site ---
+//
+// Board row 16, decided by Zach 2026-09-17: a removed (isActive:false) player
+// may not move money, and the rule is answered once rather than per site. Row
+// 14 could only honour that inside controllers.PlayerTransfer, which is the
+// handler it owned. These are the other four money handlers.
+//
+// Each rule is a pure function taking a player document already read, for the
+// reason the whole file is built around: config.DB is a nil *mongo.Database in
+// a test binary, so every one of the four reads panics rather than returning,
+// and a rule written inline at any of them would be a rule no test on this
+// machine can reach. Pulling them out is what makes these assertions exist.
+//
+// Three of the four refuse the ACTOR - the player spending, contributing or
+// managing is the one named in the payload. bankTransactionRejection is the
+// fourth and it is different: the banker is acting and the frozen player is
+// what they are acting ON. That is a separate decision, taken separately, and
+// its own test below says so.
+
+func activePlayer() models.Player {
+	return models.Player{Name: "Zach", Balance: 1500, IsActive: true}
+}
+
+func removedPlayer() models.Player {
+	return models.Player{Name: "Claude", Balance: 1500, IsActive: false}
+}
+
+func wantNoRejection(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("expected an active player to be accepted, got %q", err.Error())
+	}
+}
+
+// --- freeParkingRejection (the actor) ---
+
+func TestFreeParkingRefusesARemovedPlayer(t *testing.T) {
+	// Reachable from a real client, not only from a hand-made frame: a frozen
+	// player is still on screen, because GetPlayersInRoom deliberately does
+	// not filter on isActive (invariant 6). Free Parking's REMOVE arm is the
+	// one that loses real money - it takes the pot into a balance that has
+	// already left the game.
+	wantErrEqual(t, freeParkingRejection(removedPlayer()), "a removed player cannot use free parking")
+}
+
+func TestFreeParkingAcceptsAnActivePlayer(t *testing.T) {
+	wantNoRejection(t, freeParkingRejection(activePlayer()))
+}
+
+func TestFreeParkingRefusesOnTheFlagAndNotTheBalance(t *testing.T) {
+	// The rule is about standing, not about money: a removed player with a
+	// full balance is still refused, and an active player with nothing is not
+	// refused HERE - the ADD arm's own floor is what turns them away, inside
+	// the transaction, where it can see the amount.
+	wantErrEqual(t, freeParkingRejection(models.Player{Name: "Claude", Balance: 99999}), "a removed player cannot use free parking")
+	wantNoRejection(t, freeParkingRejection(models.Player{Name: "Zach", Balance: 0, IsActive: true}))
+}
+
+// --- managePropertiesRejection (the actor) ---
+
+func TestManagePropertiesRefusesARemovedPlayer(t *testing.T) {
+	wantErrEqual(t, managePropertiesRejection(removedPlayer()), "a removed player cannot manage properties")
+}
+
+func TestManagePropertiesAcceptsAnActivePlayer(t *testing.T) {
+	wantNoRejection(t, managePropertiesRejection(activePlayer()))
+}
+
+// --- propertyPurchaseRejection (the actor) ---
+
+func TestPropertyPurchaseRefusesARemovedBuyer(t *testing.T) {
+	wantErrEqual(t, propertyPurchaseRejection(removedPlayer()), "a removed player cannot buy property")
+}
+
+func TestPropertyPurchaseAcceptsAnActiveBuyer(t *testing.T) {
+	wantNoRejection(t, propertyPurchaseRejection(activePlayer()))
+}
+
+// --- bankTransactionRejection (the target, which is the different one) ---
+
+func TestBankTransactionRefusesARemovedTarget(t *testing.T) {
+	// This is the half of row 19 that is NOT "a frozen player may not act" -
+	// the actor here is the banker and the banker is fine. What is refused is
+	// moving money onto a document that has already left the game, where the
+	// write means nothing and the broadcast says it meant something.
+	wantErrEqual(t, bankTransactionRejection(removedPlayer()), "that player has been removed from the game")
+}
+
+func TestBankTransactionAcceptsAnActiveTarget(t *testing.T) {
+	wantNoRejection(t, bankTransactionRejection(activePlayer()))
+}
+
+func TestBankTransactionSaysTheSameThingAsTransferDoesAboutARemovedRecipient(t *testing.T) {
+	// The wording is a deliberate echo of transferRejection's recipient arm
+	// (controllers/transferControllers.go), because it is the same situation
+	// reached by a different route, and a player should not have to learn two
+	// sentences for it. This pins that on purpose: if one is reworded and the
+	// other is not, this is what says so.
+	wantErrEqual(t, bankTransactionRejection(removedPlayer()), "that player has been removed from the game")
+}
+
+// --- the hoist that row 19's manage-properties rule needed ---
+//
+// The player read in handleManageProperties used to sit at the BOTTOM of the
+// handler, after the deeds had been rewritten and the balance moved, and it
+// existed only to put a name in the notification. A refusal there refuses
+// nothing, so row 19 moved the read above both writes. That in turn forced the
+// managementType check up above the read: the check used to live in the work
+// switch's own default arm, which is now below the first nil-config.DB
+// dereference and would panic before it could name the bad value.
+
+// manageOutcome is freeParkingOutcome for the manage-properties handler, and it
+// exists for the same reason: a payload that clears every payload-shape check
+// now reaches controllers.GetPlayer and panics on the nil config.DB rather than
+// erroring. The "not panicked" half is what proves a rejection fired above the
+// read rather than something further down.
+func manageOutcome(t *testing.T, payload any) (err error, panicked bool) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+		}
+	}()
+	err = NewRoomManager().handleManageProperties(testClient(), Message{
+		Type:    "MANAGE_PROPERTIES",
+		Payload: payload,
+	})
+	return err, false
+}
+
+func TestManagePropertiesChecksTheManagementTypeBeforeReadingThePlayer(t *testing.T) {
+	// Everything else in this payload is valid, so without the hoisted switch
+	// the handler reaches the player read and panics instead of naming the bad
+	// value. That panic is what this test is really guarding against: it is
+	// what the three managementType tests at the top of this file would start
+	// doing if the check ever slipped back down into the work switch.
+	payload := validManagePayload()
+	payload["managementType"] = "HOUSE"
+
+	err, panicked := manageOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid management type: HOUSE")
+}
+
+// managePanicStack runs the handler on a payload that clears every shape check
+// and returns the stack of the panic it takes on the nil config.DB, or "" if it
+// did not panic.
+//
+// This is a step past what the other outcome helpers do, and it is here because
+// nothing weaker can see the thing row 19 actually changed in this handler. The
+// deed writes and the player read BOTH panic on the nil config.DB, so "it
+// panicked" cannot tell which of them the handler reached first - and which it
+// reaches first is the whole point of moving the read up. The stack can tell
+// them apart. Verified by mutation: with the read put back where it used to
+// be, below the writes, every other test in this file stays green and only
+// this one goes red.
+//
+// The cost is that this test knows the name of a function in another package.
+// If controllers.GetPlayer is renamed, or a seam is put in front of it, this
+// goes red and the fix is to name whatever now stands in for the read - not to
+// delete the assertion.
+func managePanicStack(t *testing.T, payload any) (stack string) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			stack = string(debug.Stack())
+		}
+	}()
+	NewRoomManager().handleManageProperties(testClient(), Message{
+		Type:    "MANAGE_PROPERTIES",
+		Payload: payload,
+	})
+	return ""
+}
+
+func TestManagePropertiesReadsThePlayerBeforeTouchingTheDeeds(t *testing.T) {
+	// Until 2026-09-17 this handler rewrote the deeds and moved the balance
+	// and only then read the player, to get a name for the notification. Row
+	// 19 put a rule on that read, and a rule that runs after the money has
+	// moved is not a rule. This is what holds the read above the writes.
+	stack := managePanicStack(t, validManagePayload())
+
+	if stack == "" {
+		t.Fatal("expected a valid payload to reach Mongo and panic on the nil config.DB")
+	}
+	if !strings.Contains(stack, "controllers.GetPlayer") {
+		t.Fatalf("expected the handler to panic at the player read; it got further first:\n%s", stack)
+	}
+	if strings.Contains(stack, "HandleHouseManagement") {
+		t.Fatalf("the deeds were rewritten before the player was read:\n%s", stack)
 	}
 }
