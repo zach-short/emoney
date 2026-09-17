@@ -35,7 +35,13 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
     properties: Property[] | undefined;
   }>({ group: null, properties: undefined });
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  const [propertiesToBuy, setPropertiesToBuy] = useState<Property[]>([]);
+
+  // One gate for the whole drawer. This used to be asked two different ways --
+  // `player.id === currentPlayer.id` for the mortgage controls and
+  // `currentPlayer.id === property.playerId` for the tap target -- which can
+  // disagree, and whose second branch only ever toggled a selection overlay
+  // with nothing behind it. Another player's card is a read-only deed browser.
+  const isOwnCard = currentPlayer?.id === player?.id;
 
   const groupedProperties = Object.entries(
     (player?.properties ?? []).reduce((acc, property) => {
@@ -290,42 +296,32 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
     return (
       <div className="relative group">
         <div className="relative">
-          {currentPlayer?.id !== property?.playerId &&
-            propertiesToBuy.some((p) => p.id === property.id) && (
-              <div className="absolute inset-0 bg-white opacity-50 rounded"></div>
-            )}
           <PropertyCard
             property={property}
             className2={`pt-3`}
-            onClick={() => {
-              if (currentPlayer?.id === property?.playerId) {
-                const canManage = canManageHouses(groupProperties, property);
-                if (canManage !== true) {
-                  Toast({
-                    message: "You cannot build on this property",
-                    details: canManage,
-                    icon: (
-                      <PiHouseSimpleThin className="text-red-700 text-xl" />
-                    ),
-                  });
-                } else {
-                  setHouseBuildingMode(true);
-                  setSelectedGroup(property.group);
-                }
-              } else {
-                if (propertiesToBuy.some((p) => p.id === property.id)) {
-                  setPropertiesToBuy((prev) =>
-                    prev.filter((p) => p.id !== property.id)
-                  );
-                } else {
-                  setPropertiesToBuy((prev) => [...prev, property]);
-                }
-              }
-            }}
+            onClick={
+              isOwnCard
+                ? () => {
+                    const canManage = canManageHouses(groupProperties, property);
+                    if (canManage !== true) {
+                      Toast({
+                        message: "You cannot build on this property",
+                        details: canManage,
+                        icon: (
+                          <PiHouseSimpleThin className="text-red-700 text-xl" />
+                        ),
+                      });
+                    } else {
+                      setHouseBuildingMode(true);
+                      setSelectedGroup(property.group);
+                    }
+                  }
+                : undefined
+            }
           />
         </div>
 
-        {player?.id === currentPlayer?.id && (
+        {isOwnCard && (
           <>
             <div className="grid grid-cols-1 gap-2 py-2">
               {canMortgage && !property.isMortgaged && (
@@ -362,6 +358,11 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
 
   return (
     <div className={`space-y-4 ! ${josephinBold.className}`}>
+      {!isOwnCard && (
+        <p className={`text-center text-sm text-gray-400 ${josephinNormal.className}`}>
+          {player?.name}&apos;s deeds &mdash; view only
+        </p>
+      )}
       {currentView === "properties" ? (
         <>
           {houseBuildingMode ? (

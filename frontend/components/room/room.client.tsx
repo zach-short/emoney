@@ -101,6 +101,13 @@ const RoomView = ({
             />
           </div>
 
+          {/* `onManageProperties` is deliberately absent here: another player's
+              Properties drawer is a read-only deed browser, decided 2026-09-16
+              (HANDOFF, Settled). Passing it would not make the drawer work --
+              the three call sites in `manage-properties.tsx` send
+              `currentPlayer.id` as the player to charge, and neither
+              `handleManageProperties` nor the property writes check who owns
+              the deed, so it would mortgage their property into your balance. */}
           {otherPlayers?.map((oPlayer) => (
             <div key={oPlayer?.id} className="flex-none snap-center">
               <PlayerCard
