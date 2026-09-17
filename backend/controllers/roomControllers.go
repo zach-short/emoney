@@ -164,8 +164,15 @@ func JoinRoom(c *gin.Context) {
 	}
 
 	playerColl := config.DB.Collection("Player")
+	// isActive scopes the collision to players who are still in the game. A
+	// kicked player is marked isActive: false rather than deleted - their
+	// document has to survive so a frozen estate's Property.playerId still
+	// resolves and their past EventHistory rows keep a name - so without this
+	// clause their name and colour would stay taken forever by someone who is
+	// no longer playing.
 	existingPlayerCount, _ := playerColl.CountDocuments(c, bson.M{
-		"roomId": room.ID,
+		"roomId":   room.ID,
+		"isActive": true,
 		"$or": []bson.M{
 			{"name": requestBody.PlayerName},
 			{"color": requestBody.PlayerColor},
