@@ -202,6 +202,11 @@ func HandleWebSocket(c *gin.Context) {
 					Payload: err.Error(),
 				})
 			}
+		default:
+			client.WriteJSON(Message{
+				Type:    "ERROR",
+				Payload: fmt.Sprintf("unknown message type: %s", message.Type),
+			})
 		}
 	}
 }
