@@ -71,23 +71,41 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 		return errors.New("invalid payload format")
 	}
 
-	amount, err := strconv.Atoi(payload["amount"].(string))
+	amountStr, ok := payload["amount"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for amount")
+	}
+
+	amount, err := strconv.Atoi(amountStr)
 	if err != nil {
 		return fmt.Errorf("invalid amount: %w", err)
 	}
 
-	roomIdStr := payload["roomId"].(string)
+	roomIdStr, ok := payload["roomId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for roomId")
+	}
 	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %v", err)
+	}
+
+	reason, ok := payload["reason"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for reason")
+	}
+
+	transferType, ok := payload["transferType"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for transferType")
 	}
 
 	transfer := models.Transfer{
 		ID:        primitive.NewObjectID(),
 		RoomID:    roomObjID,
 		Amount:    amount,
-		Reason:    payload["reason"].(string),
-		Type:      payload["transferType"].(string),
+		Reason:    reason,
+		Type:      transferType,
 		TimeStamp: time.Now(),
 		Status:    models.TransferPending,
 	}
@@ -95,11 +113,20 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 	var transferErr error
 	switch transfer.Type {
 	case "SEND":
-		fromID, err := primitive.ObjectIDFromHex(payload["fromPlayerId"].(string))
+		fromPlayerIdStr, ok := payload["fromPlayerId"].(string)
+		if !ok {
+			return errors.New("invalid payload: expected string for fromPlayerId")
+		}
+		fromID, err := primitive.ObjectIDFromHex(fromPlayerIdStr)
 		if err != nil {
 			return fmt.Errorf("invalid fromPlayerId: %w", err)
 		}
-		toID, err := primitive.ObjectIDFromHex(payload["toPlayerId"].(string))
+
+		toPlayerIdStr, ok := payload["toPlayerId"].(string)
+		if !ok {
+			return errors.New("invalid payload: expected string for toPlayerId")
+		}
+		toID, err := primitive.ObjectIDFromHex(toPlayerIdStr)
 		if err != nil {
 			return fmt.Errorf("invalid toPlayerId: %w", err)
 		}
@@ -148,21 +175,49 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 		return errors.New("invalid payload format")
 	}
 
-	amount, err := strconv.Atoi(payload["amount"].(string))
+	amountStr, ok := payload["amount"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for amount")
+	}
+
+	amount, err := strconv.Atoi(amountStr)
 	if err != nil {
 		return fmt.Errorf("invalid amount: %w", err)
 	}
 
-	roomIdStr := payload["roomId"].(string)
+	roomIdStr, ok := payload["roomId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for roomId")
+	}
 	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %v", err)
 	}
 
-	playerId := payload["playerId"].(string)
+	playerId, ok := payload["playerId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for playerId")
+	}
 	playerObjID, err := primitive.ObjectIDFromHex(playerId)
 	if err != nil {
 		return fmt.Errorf("invalid player ID: %w", err)
+	}
+
+	actionType, ok := payload["freeParkingType"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for freeParkingType")
+	}
+
+	// Validated here, above controllers.GetPlayer, for the same two reasons
+	// handleBankTransaction hoists its transactionType switch: an unrecognized
+	// value costs no database round trip, and the rejection is reachable in a
+	// test (config.DB is nil in a test binary, so anything past this point
+	// panics instead of erroring).
+	switch actionType {
+	case "ADD", "REMOVE":
+		// valid - the transaction below switches on these same two values
+	default:
+		return fmt.Errorf("invalid free parking type: %s", actionType)
 	}
 
 	player, err := controllers.GetPlayer(playerObjID)
@@ -170,7 +225,6 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 		return fmt.Errorf("failed to get player details: %w", err)
 	}
 
-	actionType := payload["freeParkingType"].(string)
 	var notification string
 
 	session, err := config.DB.Client().StartSession()
@@ -237,6 +291,12 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 
 			notification = fmt.Sprintf("%s collected $%d from Free Parking", player.Name, amount)
 			rm.CreateEventHistory(notification, roomObjID)
+		default:
+			// Unreachable: actionType was validated above. Kept so this switch
+			// can never fall through to `return nil, nil` with no notification
+			// set, which is what broadcast an empty-text FREE_PARKING toast to
+			// the whole room while moving no money.
+			return nil, fmt.Errorf("invalid free parking type: %s", actionType)
 		}
 
 		return nil, nil
@@ -269,13 +329,21 @@ func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) e
 	}
 	price := int(priceFloat)
 
-	buyerID, err := primitive.ObjectIDFromHex(payload["buyerId"].(string))
+	buyerIdStr, ok := payload["buyerId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for buyerId")
+	}
+	buyerID, err := primitive.ObjectIDFromHex(buyerIdStr)
 	if err != nil {
 		log.Printf("Invalid buyerId error: %v", err)
 		return fmt.Errorf("invalid buyerId: %w", err)
 	}
 
-	propertyID, err := primitive.ObjectIDFromHex(payload["propertyId"].(string))
+	propertyIdStr, ok := payload["propertyId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for propertyId")
+	}
+	propertyID, err := primitive.ObjectIDFromHex(propertyIdStr)
 	if err != nil {
 		log.Printf("Invalid propertyId error: %v", err)
 		return fmt.Errorf("invalid propertyId: %w", err)
@@ -311,21 +379,38 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 		return errors.New("invalid payload format")
 	}
 
-	amount, err := strconv.Atoi(payload["amount"].(string))
+	amountStr, ok := payload["amount"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for amount")
+	}
+
+	amount, err := strconv.Atoi(amountStr)
 	if err != nil {
 		return fmt.Errorf("invalid amount: %w", err)
 	}
 
-	targetPlayerID, err := primitive.ObjectIDFromHex(payload["toPlayerId"].(string))
-	if err != nil {
-		return fmt.Errorf("invalid target player ID: %w", err)
+	toPlayerIdStr, ok := payload["toPlayerId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for toPlayerId")
 	}
-	roomID, err := primitive.ObjectIDFromHex(payload["roomId"].(string))
+	targetPlayerID, err := primitive.ObjectIDFromHex(toPlayerIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid target player ID: %w", err)
 	}
 
-	transactionType := payload["transactionType"].(string)
+	roomIdStr, ok := payload["roomId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for roomId")
+	}
+	roomID, err := primitive.ObjectIDFromHex(roomIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid target player ID: %w", err)
+	}
+
+	transactionType, ok := payload["transactionType"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for transactionType")
+	}
 
 	var isAdd bool
 	switch transactionType {
@@ -400,12 +485,20 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 		return fmt.Errorf("unexpected type for amount: %T", v)
 	}
 
-	roomObjID, err := primitive.ObjectIDFromHex(payload["roomId"].(string))
+	roomIdStr, ok := payload["roomId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for roomId")
+	}
+	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %w", err)
 	}
 
-	playerID, err := primitive.ObjectIDFromHex(payload["playerId"].(string))
+	playerIdStr, ok := payload["playerId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for playerId")
+	}
+	playerID, err := primitive.ObjectIDFromHex(playerIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid player ID: %w", err)
 	}
@@ -415,7 +508,10 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 		return fmt.Errorf("invalid properties: %w", err)
 	}
 
-	manageType := payload["managementType"].(string)
+	manageType, ok := payload["managementType"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for managementType")
+	}
 
 	switch manageType {
 	case "HOUSES":

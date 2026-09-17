@@ -49,6 +49,27 @@ func validBankPayload() map[string]any {
 	}
 }
 
+// validFreeParkingPayload is a FREE_PARKING payload that gets as far as the
+// freeParkingType switch. Each test below changes exactly one field.
+func validFreeParkingPayload() map[string]any {
+	return map[string]any{
+		"amount":          "100",
+		"roomId":          "507f1f77bcf86cd799439011",
+		"playerId":        "507f1f77bcf86cd799439012",
+		"freeParkingType": "ADD",
+	}
+}
+
+// validPurchasePayload is a PURCHASE_PROPERTY payload that gets as far as the
+// buyerId parse. Each test below changes exactly one field.
+func validPurchasePayload() map[string]any {
+	return map[string]any{
+		"price":      float64(60),
+		"buyerId":    "507f1f77bcf86cd799439012",
+		"propertyId": "507f1f77bcf86cd799439013",
+	}
+}
+
 func manageErr(t *testing.T, payload any) error {
 	t.Helper()
 	return NewRoomManager().handleManageProperties(testClient(), Message{
@@ -61,6 +82,14 @@ func transferErr(t *testing.T, payload any) error {
 	t.Helper()
 	return NewRoomManager().handleTransfer(testClient(), Message{
 		Type:    "TRANSFER",
+		Payload: payload,
+	})
+}
+
+func purchaseErr(t *testing.T, payload any) error {
+	t.Helper()
+	return NewRoomManager().handlePropertyPurchase(testClient(), Message{
+		Type:    "PURCHASE_PROPERTY",
 		Payload: payload,
 	})
 }
@@ -362,7 +391,7 @@ func TestBankTransactionRejectsMalformedTargetPlayerID(t *testing.T) {
 }
 
 func TestBankTransactionReportsMalformedRoomIDAsATargetPlayerError(t *testing.T) {
-	// Documents a mislabel, not a blessing: websocketManager.go:325 reuses the
+	// Documents a mislabel, not a blessing: websocketManager.go:406 reuses the
 	// "invalid target player ID" message for the roomId branch. Raised in
 	// HANDOFF 4; change the message and this test together.
 	payload := validBankPayload()
@@ -371,4 +400,192 @@ func TestBankTransactionReportsMalformedRoomIDAsATargetPlayerError(t *testing.T)
 	err, _ := bankTransactionOutcome(t, payload)
 
 	wantErrContains(t, err, "invalid target player ID")
+}
+
+// --- freeParking ---
+
+// freeParkingOutcome is bankTransactionOutcome for the free parking handler,
+// and it exists for the same reason: config.DB is a nil *mongo.Database in a
+// test binary, so a freeParkingType the switch accepts panics inside
+// controllers.GetPlayer (controllers/playerControllers.go:154). That panic is
+// the only signal available here that a value was accepted rather than
+// rejected. If a seam is ever put in front of GetPlayer these tests stop
+// panicking; change the two accept tests to assert on the error at that point.
+func freeParkingOutcome(t *testing.T, payload any) (err error, panicked bool) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+		}
+	}()
+	err = NewRoomManager().freeParking(testClient(), Message{
+		Type:    "FREE_PARKING",
+		Payload: payload,
+	})
+	return err, false
+}
+
+func TestFreeParkingRejectsUnrecognizedType(t *testing.T) {
+	// The bug this handler had: with no default arm, "COLLECT" ran the whole
+	// Mongo transaction doing nothing, returned nil, and broadcast a
+	// FREE_PARKING message whose notification was the empty string - every
+	// client in the room toasting blank text for money that never moved.
+	payload := validFreeParkingPayload()
+	payload["freeParkingType"] = "COLLECT" // the plausible synonym for "REMOVE"
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid free parking type: COLLECT")
+}
+
+func TestFreeParkingRejectsEmptyType(t *testing.T) {
+	payload := validFreeParkingPayload()
+	payload["freeParkingType"] = ""
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid free parking type: ")
+}
+
+func TestFreeParkingRejectsLowercaseType(t *testing.T) {
+	// The switch is case-sensitive and the frontend union is upper case
+	// (frontend/types/payloads.ts). "add" is the shape a hand-rolled client
+	// would most plausibly send.
+	payload := validFreeParkingPayload()
+	payload["freeParkingType"] = "add"
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the player read, got a panic")
+	}
+	wantErrEqual(t, err, "invalid free parking type: add")
+}
+
+func TestFreeParkingRejectsBeforeReadingThePlayer(t *testing.T) {
+	// The point of hoisting the validation above controllers.GetPlayer: a bad
+	// freeParkingType costs no database round trip. A panic here means the
+	// validation has slipped back below the read.
+	payload := validFreeParkingPayload()
+	payload["freeParkingType"] = "NOPE"
+
+	_, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("freeParking reached the database before validating freeParkingType")
+	}
+}
+
+func TestFreeParkingAcceptsAdd(t *testing.T) {
+	payload := validFreeParkingPayload()
+	payload["freeParkingType"] = "ADD"
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected ADD to be accepted and reach the database, got %v", err)
+	}
+}
+
+func TestFreeParkingAcceptsRemove(t *testing.T) {
+	payload := validFreeParkingPayload()
+	payload["freeParkingType"] = "REMOVE"
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected REMOVE to be accepted and reach the database, got %v", err)
+	}
+}
+
+func TestFreeParkingRejectsNonObjectPayload(t *testing.T) {
+	err, _ := freeParkingOutcome(t, "not-an-object")
+
+	wantErrEqual(t, err, "invalid payload format")
+}
+
+func TestFreeParkingRejectsUnparseableAmount(t *testing.T) {
+	payload := validFreeParkingPayload()
+	payload["amount"] = "one hundred"
+
+	err, _ := freeParkingOutcome(t, payload)
+
+	wantErrContains(t, err, "invalid amount")
+}
+
+func TestFreeParkingRejectsMalformedPlayerID(t *testing.T) {
+	payload := validFreeParkingPayload()
+	payload["playerId"] = "not-an-object-id"
+
+	err, _ := freeParkingOutcome(t, payload)
+
+	wantErrContains(t, err, "invalid player ID")
+}
+
+// --- wrong-typed payload fields ---
+//
+// Every payload field these handlers read as a string used to be a single-value
+// type assertion, so a field that was absent or of another JSON type panicked
+// rather than erroring. gin.Default() installs Recovery so the process survived,
+// but the deferred cleanup in handler.go:54-64 ran first: the socket closed and
+// the player was bounced out of the room (HANDOFF 3). The cases below are one
+// per handler, and each asserts the rejection happens before any Mongo access.
+
+func TestBankTransactionRejectsNonStringTransactionType(t *testing.T) {
+	payload := validBankPayload()
+	payload["transactionType"] = float64(1)
+
+	err, panicked := bankTransactionOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection, got a panic")
+	}
+	wantErrEqual(t, err, "invalid payload: expected string for transactionType")
+}
+
+func TestFreeParkingRejectsMissingFreeParkingType(t *testing.T) {
+	// An absent field asserts to the zero value of interface{}, which is not a
+	// string - the same branch a wrong-typed field takes.
+	payload := validFreeParkingPayload()
+	delete(payload, "freeParkingType")
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection, got a panic")
+	}
+	wantErrEqual(t, err, "invalid payload: expected string for freeParkingType")
+}
+
+func TestManagePropertiesRejectsNonStringManagementType(t *testing.T) {
+	payload := validManagePayload()
+	payload["managementType"] = []any{"HOUSES"}
+
+	err := manageErr(t, payload)
+
+	wantErrEqual(t, err, "invalid payload: expected string for managementType")
+}
+
+func TestTransferRejectsNonStringReason(t *testing.T) {
+	payload := validTransferPayload()
+	payload["reason"] = float64(42)
+
+	err := transferErr(t, payload)
+
+	wantErrEqual(t, err, "invalid payload: expected string for reason")
+}
+
+func TestPropertyPurchaseRejectsNonStringBuyerID(t *testing.T) {
+	payload := validPurchasePayload()
+	payload["buyerId"] = true
+
+	err := purchaseErr(t, payload)
+
+	wantErrEqual(t, err, "invalid payload: expected string for buyerId")
 }
