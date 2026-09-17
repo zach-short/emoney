@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+#
+# emoney — one name for everything this repo gets told to do.
+#
+#   emoney              the menu
+#   emoney deploy       build and promote the frontend to production
+#   emoney dev          run the dev server against the production API
+#   emoney health       is production actually serving?
+#
+# There is no CI in this repo — `.github/` does not exist, and the Vercel project is not
+# wired to the GitHub remote. Pushing publishes nothing. A deploy is a person running a
+# command, which is exactly why the command belongs here instead of in someone's memory.
+#
+# It lives in scripts/ rather than ~/.zshrc so it is version-controlled next to what it
+# calls: a command that grows a step grows it in the same commit as the step. The shell
+# side stays three lines and never needs editing again — `emoney shell` prints them.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+API="https://api.emoney.club"
+SITE="https://www.emoney.club"
+
+if [[ -t 1 ]]; then B=$'\033[1m'; D=$'\033[2m'; O=$'\033[0m'; else B=''; D=''; O=''; fi
+say() { printf '%s==>%s %s\n' "$B" "$O" "$*"; }
+die() { printf 'emoney: %s\n' "$*" >&2; exit 1; }
+
+# name:one-line description — single source of truth for both the menu and completion
+COMMANDS=(
+  "deploy:Build and promote frontend/ to production via the Vercel CLI"
+  "api:Build backend/ and ship the binary to the VM (needs EMONEY_HOST)"
+  "dev:Run the Next dev server against the production API"
+  "gates:Typecheck and build the frontend"
+  "health:Check the API, the site, and a direct room URL"
+  "room:Print a room's players, balances and property counts"
+  "logs:Tail the backend service journal on the VM (needs EMONEY_HOST)"
+  "shell:Print the ~/.zshrc snippet for the emoney function + completion"
+  "help:List commands"
+)
+
+cmd_deploy() {
+  # frontend/ carries a .vercel link (project `emoney`), so the CLI needs no arguments.
+  # Vercel builds server-side and only promotes on success, so a broken commit cannot
+  # take production down — it just fails the deploy and leaves the last good one serving.
+  # That is the safety net standing in for the tests this repo does not have.
+  cd "$ROOT/frontend" && vercel --prod
+}
+
+cmd_api() {
+  # The Go binary is cross-compiled locally and scp'd; deploy.sh keeps the previous one
+  # for a one-line rollback. EMONEY_HOST is deliberately not recorded in the repo and is
+  # not in any dotfile either — if you do not have it, it is in the Cloudflare/GCP console
+  # as the VM's static IP, and the user is whatever you created the VM with.
+  #
+  # Run exactly one instance, forever. Room membership lives in process memory
+  # (backend/websocket/websocketManager.go), so a second replica silently splits rooms and
+  # players stop seeing each other's moves.
+  [[ -n "${EMONEY_HOST:-}" ]] || die "set EMONEY_HOST, e.g. EMONEY_HOST=zach@203.0.113.10 emoney api"
+  cd "$ROOT/backend" && EMONEY_HEALTH_URL="$API" ./deploy/deploy.sh
+}
+
+cmd_dev() {
+  # Both variables matter and neither has a usable default:
+  #   NEXT_PUBLIC_API_URL          — REST base. Unset, it falls back to localhost:8080,
+  #                                  and there is no local Mongo to talk to.
+  #   NEXT_PUBLIC_API_URL_NO_PREFIX — the socket host.
+  # The socket *scheme* is derived from NEXT_PUBLIC_API_URL (lib/utils/wsHelpers.ts), so
+  # pointing at the https API gets you wss and a live room. It used to key off NODE_ENV,
+  # which meant a dev server aimed at a remote API could never open a socket at all.
+  #
+  # Port 3000 is not a preference: backend/main.go's CORS allowlist names
+  # http://localhost:3000 literally. Any other port fails preflight with no useful error.
+  cd "$ROOT/frontend" && \
+    NEXT_PUBLIC_API_URL="$API" \
+    NEXT_PUBLIC_API_URL_NO_PREFIX="${API#https://}" \
+    npx next dev --port 3000
+}
+
+cmd_gates() {
+  # `tsc --noEmit` is the weaker of the two and should not be trusted alone: it passed for
+  # months over a Room type that named a `roomCode` field the API has never sent, because
+  # a type that is fiction still typechecks. There are no tests and no linter here, so the
+  # build plus walking the app is the whole gate.
+  cd "$ROOT/frontend"
+  say "typecheck"
+  npx tsc --noEmit
+  say "build"
+  npx next build
+}
+
+cmd_health() {
+  local code room="${1:-HEALTH}"
+
+  # /v1/rooms/:code/exists hits Mongo, so a 200 proves the process AND the database, not
+  # just that something is listening on the port.
+  say "api     $API"
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$API/v1/rooms/$room/exists" || true)"
+  printf '    %-28s %s\n' "/v1/rooms/$room/exists" "${code:-no response}"
+
+  say "site    $SITE"
+  code="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 10 "$SITE/" || true)"
+  printf '    %-28s %s\n' "/" "${code:-no response}"
+
+  # This is the check worth having. A direct hit on a room URL returned 500 in production
+  # for the life of the app: app/room/[code]/page.tsx read localStorage while rendering,
+  # which throws on the server, and nobody noticed because you only ever *arrive* at a room
+  # by client-side navigation from join/create. A root-only health check stays green
+  # straight through that. Refreshing mid-game is the thing that has to work.
+  code="$(curl -sL -o /dev/null -w '%{http_code}' --max-time 10 "$SITE/room/$room" || true)"
+  printf '    %-28s %s%s\n' "/room/$room" "${code:-no response}" \
+    "$([[ "$code" == "200" ]] || echo "   <- direct room URL is broken")"
+}
+
+cmd_room() {
+  local code="${1:-}"
+  [[ -n "$code" ]] || die "usage: emoney room <code>"
+  # python3 rather than jq: jq is not guaranteed on this machine, python3 is.
+  # Note the room's code comes back as `code` — the frontend Room type called it
+  # `roomCode` for months and silently read undefined.
+  # Quotes inside f-string braces only parse on Python 3.12+, so every value is pulled
+  # into a local first. Keeps this working on whatever python3 the machine happens to have.
+  curl -fsS --max-time 10 "$API/v1/rooms/$code/players" | python3 -c '
+import json, sys
+
+d = json.load(sys.stdin)
+r = d.get("room") or {}
+name = r.get("name", "?")
+rcode = r.get("code", "?")
+parking = r.get("freeParking", 0)
+print("%s  (%s)   free parking $%s" % (name, rcode, parking))
+print()
+
+for p in d.get("players") or []:
+    pname = p.get("name", "?")
+    balance = p.get("balance", 0)
+    count = len(p.get("properties") or [])
+    banker = " banker" if p.get("isBanker") else ""
+    print("  %-12s $%-7s %s properties%s" % (pname, balance, count, banker))
+print()
+
+for e in (d.get("eventHistory") or [])[:5]:
+    print("  %s" % e.get("event", ""))
+'
+}
+
+cmd_logs() {
+  [[ -n "${EMONEY_HOST:-}" ]] || die "set EMONEY_HOST, e.g. EMONEY_HOST=zach@203.0.113.10 emoney logs"
+  ssh "$EMONEY_HOST" "sudo journalctl -u ${EMONEY_SERVICE:-emoney} -n ${1:-60} --no-pager"
+}
+
+cmd_help() {
+  echo "usage: emoney <command>"
+  echo
+  for entry in "${COMMANDS[@]}"; do
+    printf "  %-9s %s\n" "${entry%%:*}" "${entry#*:}"
+  done
+}
+
+cmd_shell() {
+  cat <<'EOF'
+emoney() { "$HOME/Projects/emoney/scripts/emoney" "$@"; }
+
+_emoney_complete() {
+  local -a subcmds
+  subcmds=("${(@f)$(emoney --complete)}")
+  _describe 'command' subcmds
+}
+compdef _emoney_complete emoney
+EOF
+}
+
+cmd___complete() {
+  for entry in "${COMMANDS[@]}"; do
+    echo "$entry"
+  done
+}
+
+# Same table drives an fzf picker on bare invocation — only when it'd actually be
+# interactive, so a cron job or `emoney health | something` never gets asked anything.
+interactive_pick() {
+  local lines
+  lines="$(for entry in "${COMMANDS[@]}"; do
+    printf "%-9s %s\n" "${entry%%:*}" "${entry#*:}"
+  done)"
+  echo "$lines" | fzf --prompt='emoney> ' --height='~70%' --reverse --no-info \
+    --header='select a command' | awk '{print $1}'
+}
+
+if [[ $# -eq 0 && -t 0 && -t 1 ]] && command -v fzf >/dev/null 2>&1; then
+  picked="$(interactive_pick || true)"
+  [[ -n "$picked" ]] || exit 0
+  set -- "$picked"
+fi
+
+case "${1:-help}" in
+  deploy) cmd_deploy ;;
+  api) cmd_api ;;
+  dev) cmd_dev ;;
+  gates) cmd_gates ;;
+  health) cmd_health "${2:-}" ;;
+  room) cmd_room "${2:-}" ;;
+  logs) cmd_logs "${2:-}" ;;
+  shell) cmd_shell ;;
+  --complete) cmd___complete ;;
+  help|*) cmd_help ;;
+esac
