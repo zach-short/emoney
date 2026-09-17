@@ -1,17 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   MdOutlineInstallDesktop,
   MdOutlineInstallMobile,
 } from "react-icons/md";
+import { useIsStandalone } from "@/hooks/use-browser-env";
 
 const FloatingInstallButton = ({ className }: { className?: string }) => {
-  const [isStandalone, setIsStandalone] = useState(false);
-
-  useEffect(() => {
-    setIsStandalone(window.matchMedia("(display-mode: standalone)").matches);
-  }, []);
+  const isStandalone = useIsStandalone();
 
   if (isStandalone) {
     return null;

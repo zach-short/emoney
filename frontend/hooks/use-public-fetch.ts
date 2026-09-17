@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useState } from "react";
 import { ApiResponse } from "@/lib/utils/api.service";
 
 export function usePublicFetch<T, P = any>(
@@ -15,28 +15,44 @@ export function usePublicFetch<T, P = any>(
 
   const { resourceParams = [], dependencies = [], enabled = true } = options;
 
+  const applyResponse = useCallback((response: ApiResponse<T>) => {
+    if (response.success) {
+      setData(response.data);
+      setError(null);
+    } else {
+      setData(null);
+      setError(response.error);
+    }
+  }, []);
+
+  // `resourceFn` and `resourceParams` are re-created by the caller on every
+  // render, so they must not drive the effect. Reading them through an effect
+  // event keeps each fetch on the latest values while the effect itself only
+  // re-runs when `enabled` or the caller's own `dependencies` change.
+  const getRequest = useEffectEvent(() => ({
+    fn: resourceFn,
+    params: resourceParams,
+  }));
+
+  // `dependencies` is a fresh array literal each render, so compare by value.
+  // Callers pass primitives (ids, room codes), which serialize stably.
+  const dependencyKey = JSON.stringify(dependencies);
+
   useEffect(() => {
+    if (!enabled) return;
+
     let isMounted = true;
 
     const fetchData = async () => {
-      if (!enabled) {
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
 
+      const { fn, params } = getRequest();
+
       try {
-        const response = await resourceFn(...resourceParams);
+        const response = await fn(...params);
 
         if (isMounted) {
-          if (response.success) {
-            setData(response.data);
-            setError(null);
-          } else {
-            setData(null);
-            setError(response.error);
-          }
+          applyResponse(response);
         }
       } catch (error) {
         if (isMounted) {
@@ -55,19 +71,12 @@ export function usePublicFetch<T, P = any>(
     return () => {
       isMounted = false;
     };
-  }, [enabled, ...dependencies]);
+  }, [enabled, dependencyKey, applyResponse]);
 
   const refetch = async () => {
     setLoading(true);
     try {
-      const response = await resourceFn(...resourceParams);
-      if (response.success) {
-        setData(response.data);
-        setError(null);
-      } else {
-        setData(null);
-        setError(response.error);
-      }
+      applyResponse(await resourceFn(...resourceParams));
     } catch (error) {
       setData(null);
       setError(error);
@@ -76,7 +85,9 @@ export function usePublicFetch<T, P = any>(
     }
   };
 
-  return { data, error, loading, refetch };
+  // Nothing is in flight while disabled, so report that during render rather
+  // than writing `loading` from an effect.
+  return { data, error, loading: enabled ? loading : false, refetch };
 }
 
 interface PublicActionOptions<T = any> {

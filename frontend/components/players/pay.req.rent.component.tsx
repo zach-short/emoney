@@ -1,5 +1,5 @@
 import { Player, Property } from "@/types/schema";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
 import { josephinBold } from "../ui/fonts";
 import { calculateRent } from "../ui/helper-funcs";
@@ -42,31 +42,44 @@ const PayRequestRent = ({
   >("colors");
   const [roll, setRoll] = useState("12");
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  const [transactionDetails, setTransactionDetails] =
-    useState<TransactionDetails | null>(null);
+  const [selectedProperty, setSelectedProperty] = useState<Pick<
+    TransactionDetails,
+    "property" | "propertyGroup"
+  > | null>(null);
+
+  // Utility rent is a function of the dice roll, which the user can still
+  // change on the confirmation screen. Recomputing it during render keeps the
+  // amount in step with the input instead of trailing it by one commit.
+  const transactionDetails: TransactionDetails | null = selectedProperty
+    ? {
+        ...selectedProperty,
+        ...calculateRent(
+          selectedProperty.property,
+          selectedProperty.propertyGroup,
+          parseInt(roll)
+        ),
+      }
+    : null;
+
+  // Warning the user is a side effect, not state, so it stays in an effect --
+  // reading the players through an effect event so only a new roll or a new
+  // property re-triggers it, exactly as before.
+  const warnOnInsufficientFunds = useEffectEvent(() => {
+    if (!transactionDetails) return;
+
+    const payingPlayer = type === "SEND" ? fromPlayer : toPlayer;
+    if (payingPlayer.balance < transactionDetails.amount) {
+      toast.error(
+        `${payingPlayer.name} doesn't have sufficient funds (${transactionDetails.amount})`
+      );
+    }
+  });
 
   useEffect(() => {
-    if (transactionDetails && selectedGroup === "utility") {
-      const { amount, reason } = calculateRent(
-        transactionDetails.property,
-        transactionDetails.propertyGroup,
-        parseInt(roll)
-      );
-
-      setTransactionDetails({
-        ...transactionDetails,
-        amount,
-        reason,
-      });
-
-      const payingPlayer = type === "SEND" ? fromPlayer : toPlayer;
-      if (payingPlayer.balance < amount) {
-        toast.error(
-          `${payingPlayer.name} doesn't have sufficient funds (${amount})`
-        );
-      }
+    if (selectedGroup === "utility") {
+      warnOnInsufficientFunds();
     }
-  }, [roll, transactionDetails?.property, selectedGroup]);
+  }, [roll, selectedProperty?.property, selectedGroup]);
 
   if (!properties || properties?.length === 0) {
     return (
@@ -110,9 +123,7 @@ const PayRequestRent = ({
       propertiesInGroup,
     ];
 
-    setTransactionDetails({
-      amount,
-      reason,
+    setSelectedProperty({
       property,
       propertyGroup,
     });
@@ -154,7 +165,7 @@ const PayRequestRent = ({
   const handleBack = () => {
     if (currentView === "confirmation") {
       setCurrentView("properties");
-      setTransactionDetails(null);
+      setSelectedProperty(null);
     } else if (currentView === "properties") {
       setCurrentView("colors");
       setSelectedGroup(null);

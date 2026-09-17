@@ -3,6 +3,7 @@ import Button from "@/components/ui/button-custom";
 import CustomLink from "@/components/ui/cusotm-link";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useIsIOS, useIsStandalone } from "@/hooks/use-browser-env";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -10,23 +11,12 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 function InstallPrompt() {
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const isIOS = useIsIOS();
+  const isStandalone = useIsStandalone();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    interface WindowWithMSStream extends Window {
-      MSStream?: unknown;
-    }
-
-    setIsIOS(
-      /iPad|iPhone|iPod/.test(navigator.userAgent) &&
-      !(window as WindowWithMSStream).MSStream,
-    );
-
-    setIsStandalone(window.matchMedia("(display-mode: standalone)").matches);
-
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -57,15 +47,17 @@ function InstallPrompt() {
   };
 
   if (isStandalone) {
-    <div className="font flex justify-center items-center h-screen select-none">
-      <CustomLink text="E-Money" href="/" className="top-2 left-2" />
-      <Link
-        href="/"
-        className={`border font rounded-lg p-4 border-yellow-200 w-64  text-black text-2xl`}
-      >
-        Home
-      </Link>
-    </div>;
+    return (
+      <div className="font flex justify-center items-center h-screen select-none">
+        <CustomLink text="E-Money" href="/" className="top-2 left-2" />
+        <Link
+          href="/"
+          className={`border font rounded-lg p-4 border-yellow-200 w-64  text-black text-2xl`}
+        >
+          Home
+        </Link>
+      </div>
+    );
   }
 
   return (

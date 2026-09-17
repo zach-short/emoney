@@ -1,5 +1,5 @@
 import { Player, Property } from "@/types/schema";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
 import { josephinBold, josephinNormal } from "../ui/fonts";
 import { ManagePropertiesPayload } from "@/types/payloads";
@@ -30,33 +30,40 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
   );
   const [houseBuildingMode, setHouseBuildingMode] = useState(false);
   const [currentHouses, setCurrentHouses] = useState(0);
-  const [initialHouses, setInitialHouses] = useState(0);
-  const [propertyCounts, setPropertyCounts] = useState<
-    {
-      propertyId: string;
-      count: number;
-    }[]
-  >([]);
+  const [houseSync, setHouseSync] = useState<{
+    group: string | null;
+    properties: Property[] | undefined;
+  }>({ group: null, properties: undefined });
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [propertiesToBuy, setPropertiesToBuy] = useState<Property[]>([]);
-  useEffect(() => {
-    if (selectedGroup && player.properties) {
-      const groupProperties =
-        groupedProperties.find(([group]) => group === selectedGroup)?.[1] || [];
-      const initialHouseCount = groupProperties.reduce(
-        (sum, p) => sum + p.developmentLevel,
-        0
-      );
-      setInitialHouses(initialHouseCount);
-      setCurrentHouses(initialHouseCount);
-      setPropertyCounts(
-        groupProperties.map((p) => ({
-          propertyId: p.id,
-          count: p.developmentLevel,
-        }))
-      );
-    }
-  }, [selectedGroup, player.properties]);
+
+  const groupedProperties = Object.entries(
+    (player?.properties ?? []).reduce((acc, property) => {
+      if (!acc[property.group]) {
+        acc[property.group] = [];
+      }
+      acc[property.group].push(property);
+      return acc;
+    }, {} as Record<string, Property[]>)
+  );
+
+  // Re-seed the house counter from the server whenever a different group is
+  // opened or the player's properties come back changed over the socket.
+  // Done during render rather than in an effect so the counter can never be
+  // painted against a set of properties it wasn't computed from.
+  if (
+    selectedGroup &&
+    player.properties &&
+    (houseSync.group !== selectedGroup ||
+      houseSync.properties !== player.properties)
+  ) {
+    setHouseSync({ group: selectedGroup, properties: player.properties });
+    setCurrentHouses(
+      countHouses(
+        groupedProperties.find(([group]) => group === selectedGroup)?.[1] || []
+      )
+    );
+  }
 
   if (!player?.properties || player?.properties.length === 0) {
     return (
@@ -67,16 +74,6 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
       </div>
     );
   }
-
-  const groupedProperties = Object.entries(
-    player.properties.reduce((acc, property) => {
-      if (!acc[property.group]) {
-        acc[property.group] = [];
-      }
-      acc[property.group].push(property);
-      return acc;
-    }, {} as Record<string, Property[]>)
-  );
 
   const canManageHouses = (properties: Property[], property: Property) => {
     const groupedProperties: [string, Property[]][] = Object.entries(
@@ -162,58 +159,24 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
     const totalPropertiesAvailable =
       totalHotelsAvailable + totalHousesAvailable;
 
-    const distributeHouses = (totalHouses: number) => {
-      setPropertyCounts(() => {
-        const distribution = properties.map((p) => ({
-          propertyId: p.id,
-          count: p.developmentLevel,
-        }));
-
-        const houseDifference = totalHouses;
-
-        if (houseDifference > 0) {
-          for (let i = 0; i < houseDifference; i++) {
-            const minHouses = Math.min(...distribution.map((p) => p.count));
-            const candidateProps = distribution.filter(
-              (p) => p.count === minHouses
-            );
-            candidateProps[0].count++;
-          }
-        } else if (houseDifference < 0) {
-          for (let i = 0; i < Math.abs(houseDifference); i++) {
-            distribution.sort((a, b) => b.count - a.count);
-            distribution[0].count--;
-          }
-          distribution.sort(
-            (a, b) =>
-              properties.findIndex((p) => p.id === a.propertyId) -
-              properties.findIndex((p) => p.id === b.propertyId)
-          );
-        }
-
-        return distribution;
-      });
-    };
+    // The counts were only ever rebuilt from the group's server-side
+    // development levels plus the net change, never from their own previous
+    // value, so they are a plain function of the counter.
+    const initialHouses = countHouses(properties);
+    const propertyCounts = distributeHouses(
+      properties,
+      currentHouses - initialHouses
+    );
 
     const handleIncrement = () => {
       if (currentHouses < totalPropertiesAvailable) {
-        const newHouseCount = currentHouses + 1;
-        setCurrentHouses((prev) => {
-          const updated = prev + 1;
-          return updated;
-        });
-        distributeHouses(newHouseCount - initialHouses);
+        setCurrentHouses((prev) => prev + 1);
       }
     };
 
     const handleDecrement = () => {
       if (currentHouses > 0) {
-        const newHouseCount = currentHouses - 1;
-        setCurrentHouses((prev) => {
-          const updated = prev - 1;
-          return updated;
-        });
-        distributeHouses(newHouseCount - initialHouses);
+        setCurrentHouses((prev) => prev - 1);
       }
     };
 
@@ -450,6 +413,44 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
       )}
     </div>
   );
+};
+
+const countHouses = (properties: Property[]) =>
+  properties.reduce((sum, p) => sum + p.developmentLevel, 0);
+
+/**
+ * Spreads `houseDifference` houses across a group as evenly as Monopoly's
+ * even-build rule requires, starting from each property's current level.
+ * Pure: the same group and difference always give the same distribution.
+ */
+const distributeHouses = (
+  properties: Property[],
+  houseDifference: number
+): { propertyId: string; count: number }[] => {
+  const distribution = properties.map((p) => ({
+    propertyId: p.id,
+    count: p.developmentLevel,
+  }));
+
+  if (houseDifference > 0) {
+    for (let i = 0; i < houseDifference; i++) {
+      const minHouses = Math.min(...distribution.map((p) => p.count));
+      const candidateProps = distribution.filter((p) => p.count === minHouses);
+      candidateProps[0].count++;
+    }
+  } else if (houseDifference < 0) {
+    for (let i = 0; i < Math.abs(houseDifference); i++) {
+      distribution.sort((a, b) => b.count - a.count);
+      distribution[0].count--;
+    }
+    distribution.sort(
+      (a, b) =>
+        properties.findIndex((p) => p.id === a.propertyId) -
+        properties.findIndex((p) => p.id === b.propertyId)
+    );
+  }
+
+  return distribution;
 };
 
 export default ManageProperties;
