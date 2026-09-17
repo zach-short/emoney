@@ -14,9 +14,11 @@ import DataState from "@/components/containers/data-state";
 
 interface WebSocketMessage {
   type: string;
-  payload: {
-    notification?: string;
-  };
+  // Go sends `Message{Type string, Payload interface{}}` and builds each payload at the
+  // send site, so the shape is per-type and nothing checks the two sides agree. Every
+  // broadcast type sends an object carrying `notification`; `ERROR` alone sends the bare
+  // error string (`backend/websocket/handler.go:116-121`).
+  payload: { notification?: string } | string;
 }
 
 const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
@@ -100,7 +102,23 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
   // the connection effect having to re-run (and reconnect) on every render.
   const handleWebSocketNotification = useEffectEvent(
     (message: WebSocketMessage) => {
-      toast.success(message.payload.notification, {
+      const text =
+        typeof message.payload === "string"
+          ? message.payload
+          : message.payload.notification;
+
+      if (message.type === "ERROR") {
+        // The server rejects before it writes, so nothing moved and there is nothing to
+        // refetch. Without this branch the rejection rendered as an empty green success.
+        toast.error(text || "Something went wrong", {
+          duration: 4000,
+          position: "top-center",
+          className: `${josephinBold.className} text-xs text-center`,
+        });
+        return;
+      }
+
+      toast.success(text, {
         duration: 4000,
         icon: getIconForType(message.type),
         position: "top-center",
