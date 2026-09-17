@@ -324,13 +324,23 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 	if err != nil {
 		return fmt.Errorf("invalid target player ID: %w", err)
 	}
+
+	transactionType := payload["transactionType"].(string)
+
+	var isAdd bool
+	switch transactionType {
+	case "BANKER_ADD":
+		isAdd = true
+	case "BANKER_REMOVE":
+		isAdd = false
+	default:
+		return fmt.Errorf("invalid transaction type: %s", transactionType)
+	}
+
 	targetPlayer, err := controllers.GetPlayer(targetPlayerID)
 	if err != nil {
 		return fmt.Errorf("failed to get target player details: %w", err)
 	}
-
-	transactionType := payload["transactionType"].(string)
-	isAdd := transactionType == "BANKER_ADD"
 
 	err = controllers.UpdatePlayerBalanceByBanker(roomID, targetPlayerID, amount, isAdd)
 	if err != nil {
