@@ -77,15 +77,43 @@ func (rm *RoomManager) Broadcast(room string, message Message) {
 		return
 	}
 
+	// The dead clients are collected here and deleted below, under the write
+	// lock, because RLock does not exclude another RLock: two broadcasts to the
+	// same room would otherwise delete from one Go map at once, and the runtime
+	// answers that with fatal("concurrent map writes") - not a panic, so Gin's
+	// Recovery does not catch it and the one backend process dies. The fan-out
+	// keeps the read lock so broadcasts to different rooms still overlap while
+	// each does its per-client network I/O.
+	var dead []*Client
+
 	rm.mu.RLock()
-	defer rm.mu.RUnlock()
 	if clients, ok := rm.clients[room]; ok {
 		for client := range clients {
-			err := client.Conn.WriteJSON(message)
+			// Client.WriteJSON, not client.Conn.WriteJSON: rm.mu orders access
+			// to the room map, not to any one conn's writer, and two broadcasts
+			// to the same room both hold RLock while writing to the same conns.
+			// The per-client lock is what keeps one goroutine at a time inside
+			// gorilla's writer - see the Client doc comment in types.go.
+			err := client.WriteJSON(message)
 			if err != nil {
 				client.Conn.Close()
-				delete(clients, client)
+				dead = append(dead, client)
 			}
+		}
+	}
+	rm.mu.RUnlock()
+
+	if len(dead) == 0 {
+		return
+	}
+
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	// Re-checked: RemoveClient can empty the room and drop the key entirely
+	// between the two locks.
+	if clients, ok := rm.clients[room]; ok {
+		for _, client := range dead {
+			delete(clients, client)
 		}
 	}
 }
