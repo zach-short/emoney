@@ -165,6 +165,26 @@ func HandleWebSocket(c *gin.Context) {
 					Payload: err.Error(),
 				})
 			}
+		// The two auction cases. Both reply with ERROR on the sender's own
+		// conn like every case above, and for PLACE_BID that reply is the
+		// feature rather than a formality: a bid refused for insufficient
+		// funds (D17) is the first rejection a player will meet that the rest
+		// of this app would have allowed, and the browser's ERROR toast is the
+		// only thing that tells them it happened.
+		case "PLACE_BID":
+			if err := Manager.handlePlaceBid(client, message); err != nil {
+				client.WriteJSON(Message{
+					Type:    "ERROR",
+					Payload: err.Error(),
+				})
+			}
+		case "CLOSE_AUCTION":
+			if err := Manager.handleCloseAuction(client, message); err != nil {
+				client.WriteJSON(Message{
+					Type:    "ERROR",
+					Payload: err.Error(),
+				})
+			}
 		}
 	}
 }

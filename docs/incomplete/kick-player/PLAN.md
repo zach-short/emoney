@@ -1,7 +1,10 @@
 <!-- personal-config v0.2.1 · 2026-09-16 · config 1e21aa31 · standard v1.0.3 -->
 # PLAN — kick a player
 
-**Status: IN FLIGHT — PHASE 1 BUILT 2026-09-17 (HANDOFF 15 + 19), PHASES 2–5 NOT STARTED.**
+**Status: IN FLIGHT — PHASE 1 BUILT AND MERGED 2026-09-17 (HANDOFF 15 + 19, `ed87ac8` /
+`a1d7b49`); PHASE 2 BUILT 2026-09-17 (HANDOFF 20), UNCOMMITTED; PHASE 3 BUILT 2026-09-17,
+UNCOMMITTED; PHASES 4–5 NOT STARTED.**
+**No phase has had its device walk, and the backend deploy is owed.**
 §5 hazard 1's trigger fired; that blocker is closed and the paragraph is kept only as the record
 of why the wait was right. **Phase 2 is the next one and is unblocked** — it consumes Phase 1's
 wire contract, which is now written down in Phase 1's header. `GATE 2` was answered 2026-09-16 and
@@ -114,9 +117,14 @@ is board lane **D** (`PASSOFF.md` row 7). Nothing here runs in parallel with boa
 
 ### Phase 1 — Kick core, backend
 
-**Status: BUILT 2026-09-17 — HANDOFF 19. Commit hash: none yet, the work is uncommitted in
-worktree `.claude/worktrees/kick-phase1-websocket` (branch `worktree-kick-phase1-websocket`, cut
-from `main` at `c2ce09c`); fill this line in when it lands.** The `controllers/` half was built
+**Status: BUILT 2026-09-17 — HANDOFF 19. MERGED TO `main` 2026-09-17 as `ed87ac8`, merge
+`a1d7b49`** — this line asked to be filled in when it landed and was filled by the Phase 2
+session, which found it landed mid-build (HANDOFF 20; `git show HEAD:backend/websocket/handler.go
+| grep -c KICK_PLAYER` → 1). It was built in worktree `.claude/worktrees/kick-phase1-websocket`,
+cut from `main` at `c2ce09c`. **Merged is not deployed** — `EMONEY_HOST=emoney
+EMONEY_HEALTH_URL=https://api.emoney.club ./backend/deploy/deploy.sh` is still owed, and until it
+runs, a kick sent from the UI does nothing and says nothing (`handler.go`'s switch has no
+`default` arm). The `controllers/` half was built
 first and separately — HANDOFF 15, merged as `4ecfb3c`, deployed in `c2ce09c`. §5 hazard 1's
 trigger fired and was re-checked rather than assumed before any source was opened.
 
@@ -288,7 +296,30 @@ inventory is already in this plan.
 
 ### Phase 2 — Kick UI, frontend
 
-**Status: NOT STARTED. Waits on Phase 1.**
+**Status: BUILT 2026-09-17 — HANDOFF 20. Commit hash: none yet, the work is uncommitted in the
+primary checkout on `main`; fill this line in when it lands.** All nine scope items below are
+built. **Gates green and the UI driven in a browser at 375px; the device walk is owed** — those
+are different claims and the *Done when* block below says which is which.
+
+**What this phase settled or changed, for the phases that consume it:**
+
+- **Phase 4 inherits the same threading.** `onKickPlayer` runs
+  `page.tsx` → `room.client.tsx` → `player-card.tsx` → `player-card-content.tsx`, and it is passed
+  to **both** cards, unlike `onManageProperties` (there is a comment in `room.client.tsx` saying
+  why, so the next reader does not "fix" the asymmetry). An auction panel that needs a per-card
+  control follows this path; one that needs room-level state does not, and should not be bolted
+  onto it.
+- **Phase 3 has a frontend edit it did not know about.** Adding `AUCTION` means adding it to
+  `KickPlayerPayload["disposition"]` in `frontend/types/payloads.ts` **and** to the picker in
+  `frontend/components/players/remove-player.tsx`, in the same commit as the Go guard. The union
+  deliberately has two members today (BD-6), so the picker cannot grow a third option by accident.
+- **`PLAYER_KICKED` now refetches properties as well as players** (`page.tsx`) — a `BANK` kick
+  frees deeds that `GetAvailableProperties` filters on. Phase 3's auction messages will need the
+  same judgement call, message by message, and `BID_PLACED` is the one §3's last dial says must
+  **not** toast.
+- **`isRemoved` is `player?.isActive === false`**, in `player-card-content.tsx`. Any later screen
+  that lists players — an auction bidder list included — has to make the same test, because the
+  API returns kicked players forever by design (D11, *flag not filter*).
 
 **Scope.**
 
@@ -329,7 +360,8 @@ inventory is already in this plan.
 **Subagents.** None. Seven files, all named.
 
 **Done when.** `cd frontend && bun run lint` 0 · `bunx tsc --noEmit` 0 · `bun run build` 0 with
-its route count. **A local build is not evidence about production, and — corrected 2026-09-17,
+its route count. **All three green 2026-09-17** (HANDOFF 20), build listing the same ten routes as
+before the change — this phase adds no route. **A local build is not evidence about production, and — corrected 2026-09-17,
 HANDOFF 19 — there is no longer any tell in the output.** This line used to say the `apiUrl`
 line in the build output prints `http://localhost:8080` when the env vars are unset; **that
 `console.log` was removed in `bec2350` and no such line exists** (`CLAUDE.md` *gates that lie*,
@@ -339,7 +371,14 @@ nothing in a green build says so. Read `frontend/lib/utils/api.ts:3` against the
 built in, or run through `scripts/emoney dev`, which passes both variables explicitly. **Proof a green gate cannot supply:** the runtime entries
 in Phase 1's done-when, walked with the real UI instead of a hand-sent frame, at 375px — the
 device width every other walk in this ledger used — including the confirmation dialog's copy
-being readable and the successor picker appearing **only** for a banker target.
+being readable and the successor picker appearing **only** for a banker target. **STILL OWED, and
+it needs the backend deployed first.** What *was* done 2026-09-17 is a render pass, and the
+difference matters: a throwaway route rendering three cards from fabricated props was driven in a
+browser at 375×812 and then deleted, which proved the dialog fits and reads, the successor picker
+gates on `isBanker`, an inactive player is excluded from it, Confirm stays disabled until a
+successor is picked, the removed card renders, and the two dispositions emit
+`("me","BANK","sam")` and `("rita","FREEZE",undefined)`. **No kick was sent to a real backend and
+no production room was created or joined.**
 
 **Watch for.** **Scope 8 is the one that is easy to skip and invisible in a gate** — it is render
 logic with no type change behind it, so nothing fails if it is forgotten; the kick simply looks
@@ -353,9 +392,77 @@ checking the two sides agree (`CLAUDE.md`; `DESIGN.md` §9 rule 6) — `disposit
 
 ### Phase 3 — Live auction, backend
 
-**Status: NOT STARTED. Every mechanic is decided — `DESIGN.md` D14–D18. Waits on Phase 1 and
-`GATE 2`; no design question remains.** Amended 2026-09-16: this header previously named
-`GATE 1b` Q5–Q8.
+**Status: BUILT 2026-09-17, UNCOMMITTED. Its device walk is owed and needs the backend deploy
+first.** Amended 2026-09-16: this header previously named `GATE 1b` Q5–Q8.
+
+**As built.** Six files: `backend/models/auctionModel.go` (new, the `Auction` struct),
+`backend/models/roomModel.go` (+1 field), `backend/websocket/websocketManager.go`,
+`backend/websocket/handler.go` (the two new cases), `backend/websocket/websocketManager_test.go`,
+`backend/websocket/auction_test.go` (new). Plus the two frontend files BD-6 requires in the same
+commit as the Go guard: `frontend/types/payloads.ts` and
+`frontend/components/players/remove-player.tsx`. Backend suite **115 → 186**, `-race -count=3`
+clean, nine mutation checks all bit, and the diff builds in a tree extracted from `HEAD`.
+
+**Three decisions the scope did not name, all taken by Zach 2026-09-17 rather than assumed.**
+
+1. **A lot that sells is razed and unmortgaged too**, not only one that goes unsold. Scope 5 read
+   literally is `{playerId: winner}` and nothing else, which leaves D13's hole open on the sold
+   path: bidding $1 on an unwanted hotel deed would be strictly better than letting it go unsold,
+   because the unsold path razes and the sold path would not. Recorded under `DESIGN.md` D13.
+2. **A winner who cannot pay at settlement loses the deed to the Bank**, on D16's no-bid write.
+   D17 requires the second check and never says what a failed one does. A high bidder who has
+   been removed from the room since bidding takes the same path. Recorded under `DESIGN.md` D17.
+3. **`CLOSE_AUCTION` names the auction-lot it is closing — both `propertyId` and
+   `kickedPlayerId` — and both are required.** Not in the scope, and a correctness fix rather
+   than a nicety. Without the lot: two close frames — a double tap, or one retried by a flaky
+   reconnect — both read the same open lot, one loses the write conflict, `WithTransaction`
+   retries it, the retry re-reads and finds the *next* lot open, and settles that. One banker,
+   one intention, two deeds sold, nothing reporting a problem. Without the kicked player: a
+   property id identifies a *deed*, not an auction lot, and the same deed can be the open lot of
+   two different auctions — so a close frame queued on a device that missed two broadcasts can
+   hammer a later auction's first lot to the Bank with nobody able to bid. `(kickedPlayerId,
+   propertyId)` is a unique auction-lot identity, because a player cannot be kicked twice. The
+   first came out of writing the handler; the second out of the Deep review.
+
+**The Deep (Fable 5.1) review this phase requires was run, in its own worktree, verdict only, and
+it edited nothing** — its worktree was auto-cleaned and every other tree verified clean. Its
+question was the plan's: *name every interleaving of two bids and a close that produces a wrong
+winner, a double settlement, or a deed transferred without payment.* **Verdict: SOUND WITH
+CAVEATS**, and it read the mongo-driver and gorilla source rather than reasoning from memory. Two
+findings were acted on and it re-checked both:
+
+- **A wrong winner needing no concurrency at all.** The winning bidder's read treated *every*
+  error as "they left the game", so one transient read failure would send the deed to the Bank
+  with the real high bidder neither charged nor given it, and the room told they had left. Fixed
+  as `winnerStatus`, a pure function so a test can reach it, distinguishing `ErrNoDocuments` from
+  a failed read and aborting on the latter.
+- **The pin's comment described a mechanism that does not exist.** Every read in the settlement
+  callback is on the session context, so they share one snapshot and the pin *cannot* fail on the
+  attempt that read it — what actually protects the close is the `WriteConflict` plus
+  `WithTransaction`'s retry. The consequence is that **a bid committing before the close commits
+  wins**, which is right, and the opposite of what the comment claimed. Code unchanged, comment
+  and both `MatchedCount` messages rewritten to say what is true.
+
+**Raised, not folded** (`PASSOFF.md` row 13 for the first): three money bugs in `freeParking` —
+a balance read outside its own transaction and re-checked stale on retry, `CreateEventHistory`
+called inside the callback on `context.Background()` so a retry double-logs and an abort logs
+money that never moved, and `strconv.Atoi` accepting a negative amount so `ADD -50` moves $50
+*out* of Free Parking. Also: the close's deed write does not pin the current owner, so the
+pre-existing unchecked `PURCHASE_PROPERTY` lets someone buy the open lot mid-auction, be charged,
+and then have the close overwrite the deed to the winner — pinning it here would create a lot
+that can never be closed, so it is raised rather than fixed. And `BID_PLACED` broadcasts are sent
+from each bidder's own goroutine, so toasts can arrive out of commit order even though every
+client's refetched high bid is correct — Phase 4's to handle.
+
+**Two things the scope asks for that were deliberately not built, so the omissions are not
+mistaken for oversights.** (a) **No `eventTypeFor` arm for the auction's rows** — scope 7 asks
+for event-history rows, not an icon, and §3's icon dial was answered for the kick alone. The rows
+take the neutral ℹ️ pair, which is pinned by a test rather than left to chance, and adding an arm
+later means adding it *below* the kick arm. (b) **No frontend change beyond the two BD-6 files** —
+`AUCTION_LOT_CLOSED` still needs adding to `page.tsx`'s `refetchProperties` list (a close moves a
+deed, so without it Bank's Properties goes stale), and `frontend/types/schema.ts` needs the
+`auction` field by hand. Both are Phase 4's, and both are named here so Phase 4 does not have to
+rediscover them.
 
 **Driver: Default (Opus 5) — with a Deep (Fable 5.1) subagent review that is not optional.**
 Part 4's discriminator is *can the failure be silent*, and this phase answered that in three
@@ -499,7 +606,7 @@ column below is deviating from an answered gate (R12), not filling in a blank.
 | Preselected disposition | What the picker opens on | **Return to bank** — the only option that leaves the board fully playable, and the one D2's argument-against exists to make cheap |
 | Event history entry for a kick | Whether a kick is logged | **Yes** — `rm.CreateEventHistory` is one call and is the pattern for all six other mutation paths; skipping it makes the kick the one action the FAQ-promised audit log (`app/help/page.tsx:17`) cannot see |
 | The kick's event icon | Which colour/emoji pair the row gets | **Add a case** to `CreateEventHistory`'s switch (`websocketManager.go:517-532`). Left alone, a notification containing "Banker" falls into the 🏦 arm by substring — which is not wrong, just indistinguishable from a balance change |
-| Where the kicked browser lands | What the client does once its socket is gone | **Nothing new for v1** — D6 means no message arrives, so the only honest behaviour is what already happens. Note what D11 makes of that: the reconnect's `JOIN` is refused and `GetPlayersInRoom` no longer returns them, so the room fetch fails and `DataState` renders its error branch. A "you were removed" screen is now buildable (D11 settled the data question) but is **not** in scope for Phase 2 |
+| Where the kicked browser lands | What the client does once its socket is gone | **Nothing new for v1** — D6 means no message arrives, so the only honest behaviour is what already happens. ~~Note what D11 makes of that: the reconnect's `JOIN` is refused and `GetPlayersInRoom` no longer returns them, so the room fetch fails and `DataState` renders its error branch.~~ **Corrected 2026-09-17 (HANDOFF 20): the second half is wrong.** D11 was built as *flag, not filter* (Phase 1 step 6), so `GetPlayersInRoom` still returns a kicked player and **their room fetch succeeds** — the room renders, and their own card shows Phase 2's "No longer in the game" treatment like everyone else's view of it. The `JOIN` refusal half stands. The dial's answer is unchanged and no new screen was built; what changed is what "nothing new" actually looks like, and it is more honest than the error branch would have been. A "you were removed" screen is now buildable (D11 settled the data question) but is **not** in scope for Phase 2 |
 | Auction minimum increment | The smallest raise | **$1 — decided, not a dial any more** (D15). Kept in this table so that "why $1" resolves to a decision rather than to nothing. $10 would be a dated amendment to D15, not a config change |
 | ~~Auction countdown~~ | ~~Seconds from the last bid~~ | **Removed by D14 — there is no countdown.** The banker closes each lot by hand. Struck rather than deleted so that a later reader does not re-propose a timer thinking it was simply never considered |
 | Toast per bid | Whether each `BID_PLACED` raises a toast | **No** — `page.tsx:121-132` toasts and refetches on every message at `87e0821`; twenty bids would be twenty of each, from every client. Still a dial: D14 means bids arrive only while a lot is open, so the blast radius is bounded but not small |

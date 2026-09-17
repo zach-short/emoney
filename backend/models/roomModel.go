@@ -14,6 +14,12 @@ type Room struct {
 	RoomRules   RoomRules          `bson:"roomRules" json:"roomRules"`
 	CreatedAt   time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt   time.Time          `bson:"updatedAt" json:"updatedAt"`
+	// Auction is the live auction of a kicked player's estate, or nil when
+	// no auction is running in this room. Persisted here rather than in
+	// process memory (D18) - see models/auctionModel.go. omitempty on both
+	// tags so a room with no auction carries no key at all, which is what
+	// handleKickPlayer's conditional write tests for.
+	Auction *Auction `bson:"auction,omitempty" json:"auction,omitempty"`
 }
 
 type RoomRules struct {

@@ -949,19 +949,19 @@ func TestKickRejectsLowercaseDisposition(t *testing.T) {
 	wantErrEqual(t, err, "invalid disposition: bank")
 }
 
-func TestKickRejectsAuctionDispositionUntilItIsBuilt(t *testing.T) {
-	// AUCTION is a real disposition in the design and is a later phase. Until
-	// the auction exists, accepting it would mark a player gone and leave their
-	// estate in limbo - worse than refusing the action.
+func TestKickAcceptsAuctionDisposition(t *testing.T) {
+	// This test is the inverse of the one it replaces. Until Phase 3 existed,
+	// AUCTION was refused here - accepting it would have marked a player gone
+	// and left their estate in limbo, which is worse than refusing the action.
+	// The auction exists now, so the guard has to let it through to the read.
 	payload := validKickPayload()
 	payload["disposition"] = "AUCTION"
 
 	err, panicked := kickOutcome(t, payload)
 
-	if panicked {
-		t.Fatal("expected AUCTION to be refused before the player read, got a panic")
+	if !panicked {
+		t.Fatalf("expected AUCTION to be accepted and reach the database, got %v", err)
 	}
-	wantErrEqual(t, err, "invalid disposition: AUCTION")
 }
 
 func TestKickRejectsNonStringSuccessorPlayerID(t *testing.T) {
@@ -1097,7 +1097,7 @@ func TestKickAcceptsTheCallerAsTheTarget(t *testing.T) {
 // --- kickNotification ---
 
 func TestKickNotificationBankArm(t *testing.T) {
-	got := kickNotification("Claude", "BANK", "")
+	got := kickNotification("Claude", "BANK", "", 0)
 	want := "Banker removed Claude from the game. Their properties returned to the Bank."
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
@@ -1105,15 +1105,35 @@ func TestKickNotificationBankArm(t *testing.T) {
 }
 
 func TestKickNotificationFreezeArm(t *testing.T) {
-	got := kickNotification("Claude", "FREEZE", "")
+	got := kickNotification("Claude", "FREEZE", "", 0)
 	want := "Banker removed Claude from the game. Their properties stay where they are."
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
+func TestKickNotificationAuctionArm(t *testing.T) {
+	got := kickNotification("Claude", "AUCTION", "", 2)
+	want := "Banker removed Claude from the game. Their properties go up for auction."
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestKickNotificationAuctionArmWithNothingToAuction(t *testing.T) {
+	// A player holding no deeds kicked with AUCTION: no auction is opened, so
+	// the sentence must not promise one. Saying "their properties go up for
+	// auction" here would be the only line in the room that no lot ever
+	// follows, and there is no later message to correct it.
+	got := kickNotification("Claude", "AUCTION", "", 0)
+	want := "Banker removed Claude from the game. They had no properties to auction."
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 func TestKickNotificationAppendsTheSuccession(t *testing.T) {
-	got := kickNotification("Claude", "BANK", "Zach")
+	got := kickNotification("Claude", "BANK", "Zach", 0)
 	want := "Banker removed Claude from the game. Their properties returned to the Bank. Zach is now the Banker."
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
@@ -1127,13 +1147,15 @@ func TestKickNotificationSurvivesBroadcastsEmptyGuard(t *testing.T) {
 	// every arm - including the unreachable default - has to produce text.
 	for _, disposition := range []string{"BANK", "FREEZE", "AUCTION", ""} {
 		for _, successor := range []string{"", "Zach"} {
-			notification := kickNotification("Claude", disposition, successor)
-			empty, hasField := emptyNotification(map[string]interface{}{
-				"notification": notification,
-				"playerId":     "507f1f77bcf86cd799439013",
-			})
-			if !hasField || empty {
-				t.Fatalf("disposition %q, successor %q: Broadcast would drop %q", disposition, successor, notification)
+			for _, lotCount := range []int{0, 1, 4} {
+				notification := kickNotification("Claude", disposition, successor, lotCount)
+				empty, hasField := emptyNotification(map[string]interface{}{
+					"notification": notification,
+					"playerId":     "507f1f77bcf86cd799439013",
+				})
+				if !hasField || empty {
+					t.Fatalf("disposition %q, successor %q, lots %d: Broadcast would drop %q", disposition, successor, lotCount, notification)
+				}
 			}
 		}
 	}
@@ -1146,7 +1168,7 @@ func TestKickEventIconIsNotTheBankIcon(t *testing.T) {
 	// anywhere below the bank arm would never be reached and the row would be
 	// drawn exactly like a balance change. This is the test that catches a
 	// reorder of that switch.
-	got := eventTypeFor(kickNotification("Claude", "BANK", ""))
+	got := eventTypeFor(kickNotification("Claude", "BANK", "", 0))
 	want := []string{"#dc2626", "\U0001f6ab"}
 
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
@@ -1155,11 +1177,16 @@ func TestKickEventIconIsNotTheBankIcon(t *testing.T) {
 }
 
 func TestKickEventIconHoldsForEveryArmOfTheCopy(t *testing.T) {
-	for _, disposition := range []string{"BANK", "FREEZE"} {
+	// AUCTION is in this list with both lot counts: its sentence is the one
+	// that does not end in "returned to the Bank", and "from the game" is what
+	// has to keep carrying the icon.
+	for _, disposition := range []string{"BANK", "FREEZE", "AUCTION"} {
 		for _, successor := range []string{"", "Zach"} {
-			notification := kickNotification("Claude", disposition, successor)
-			if got := eventTypeFor(notification); got[1] != "\U0001f6ab" {
-				t.Fatalf("disposition %q, successor %q: got %v for %q", disposition, successor, got, notification)
+			for _, lotCount := range []int{0, 3} {
+				notification := kickNotification("Claude", disposition, successor, lotCount)
+				if got := eventTypeFor(notification); got[1] != "\U0001f6ab" {
+					t.Fatalf("disposition %q, successor %q, lots %d: got %v for %q", disposition, successor, lotCount, got, notification)
+				}
 			}
 		}
 	}

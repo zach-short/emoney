@@ -445,6 +445,18 @@ need one.
 bug to them. Accepted for v1 and revisitable: the by-`PlayerID` scan Phase 1 adds is the same
 scan a `SendTo` would use, so the follow-on is small (`PLAN.md` §4).
 
+**As built, 2026-09-17 (Phase 2, HANDOFF 20).** The dial that reads on this decision — "where the
+kicked browser lands", *nothing new for v1* — was honoured: no "you were removed" screen was
+built. **But its stated consequence turned out to be wrong, and the real behaviour is kinder than
+the one this decision was defended against.** The dial predicted the kicked player's room fetch
+would fail into `DataState`'s error branch; D11 shipped as *flag, not filter*, so
+`GetPlayersInRoom` still returns them, the room renders, and Phase 2's removed-card treatment
+draws **their own card** with a muted *"No longer in the game"* banner and no controls. So the
+screen does not "simply go dark" — the argument-against recorded above is softened, though not
+answered: they are still told nothing at the moment it happens, and their socket still retries
+every second into a refused `JOIN`. The follow-on this decision names (a targeted `SendTo` built
+on Phase 1's by-`PlayerID` scan) is unchanged and still not built.
+
 ### D7 — The live auction is open to every remaining player in the room.
 
 Ratified 2026-09-16 as the explicit content of §7 point 1's answer: *"a live auction everyone
@@ -868,6 +880,16 @@ app. Accepted, and it is what the confirmation dialog (`PLAN.md` §3) and R7's c
 to blunt. **Explicitly not taken: Q3(c)** — a separate "Leave and hand off" control in the
 navbar's Danger Zone. One entry point, not two.
 
+**As built, 2026-09-17 (Phase 2, HANDOFF 20).** One flow, one component: the kick control renders
+on every card including the banker's own, and deliberately does **not** reuse the card-identity
+test at `player-card-content.tsx:182` that hides "Pay or Request" on your own card. The dialog
+carries its own copy throughout for a self-kick — *"Remove yourself?"*, *"You'll be dropped from
+the game and won't be able to join back in. Someone else has to take the bank first."*,
+*"What happens to your properties?"*, *"Remove myself"* — which is what `PLAN.md` scope 7 asked
+for against this decision's recorded mis-tap argument. The successor picker is the mitigation with
+teeth: Confirm stays **disabled** until a successor is chosen, so the most expensive mis-tap in
+the app takes at least three deliberate taps. Q3(c)'s separate navbar control stays not-taken.
+
 ### D13 — A deed going back to the bank on a kick is **razed**: its houses and hotels are sold back to the bank and `developmentLevel` goes to 0. `manager.HandlePropertySaleMortgage`'s `SELL` case is **not** changed.
 
 Ratified 2026-09-16, answering §10 Q4 with its recommended option (a), including the carve-out
@@ -892,6 +914,16 @@ why the two differ**, so the next reader finds the disagreement documented rathe
 like drift. **Scope note:** whether the mortgage clears is unchanged and not part of this — D3
 already settled that a returned deed comes back unmortgaged, because that is what `SELL` does
 and the bank now holds the deed.
+
+**As built, 2026-09-17 — the auction's sold path razes as well, and that is an extension of this
+decision rather than a departure from it.** D13 covers a deed going back to the bank on a kick and
+is silent on a deed sold at auction. `PLAN.md` Phase 3 scope 5 read literally would write only
+`{playerId: winner}`, which reopens this decision's own hole on the other path: with the unsold
+path razing (scope 6) and the sold path not, bidding $1 on an unwanted hotel deed becomes strictly
+better than letting it go unsold. Zach's call, 2026-09-17: **a lot that sells is razed and
+unmortgaged too, so what is auctioned is the deed and not the development on it** — which is also
+the real rule, buildings going back to the bank when a player is out. `SELL` is still not changed;
+the carve-out above stands untouched.
 
 ### D14 — The banker closes each auction lot manually. There is no timer.
 
@@ -965,6 +997,19 @@ the `ERROR` branch is on `main` (HANDOFF 9, merged; verified on `main` 2026-09-1
 **Explicitly not taken: Q8(c)**, settlement-only rejection, because an auction won by someone who
 cannot pay forces a whole new decision — re-auction, next-highest bidder, or bank — that this
 answer exists to avoid.
+
+**As built, 2026-09-17 — what a failed second check does, which this decision never said.** D17
+requires the re-check and stops there; the case where it fails had no answer. Zach's call,
+2026-09-17: **the deed goes to the Bank on D16's no-bid write** — razed, unmortgaged, queue
+advances, and the sentence the room reads says the winner could not cover the bid, so the outcome
+is never silent. **A high bidder who has been removed from the room since bidding takes the same
+path**, which is reachable because the banker can kick a bidder mid-auction with `BANK` or
+`FREEZE`. Chosen because it introduces no new concept — D16's own defense is that the auction's
+failure mode is a state the design already handles — and because the alternatives are exactly the
+re-auction / next-highest-bidder / bank question this decision's argument-against exists to avoid.
+The other two options were considered and recorded: refusing the close leaves a lot that can never
+be closed if the winner's balance never recovers, and re-opening the lot at $0 is the re-auction
+Q8(c) ruled out.
 
 ### D18 — Auction state is persisted on the `Room` document in Mongo, not in process memory.
 

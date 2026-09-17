@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type RoomManager struct {
@@ -820,12 +822,14 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 	// Validated here rather than at the write, for the same two reasons
 	// handleBankTransaction hoists its transactionType switch: an unrecognized
 	// value costs no database round trip, and the rejection is reachable in a
-	// test. AUCTION is a real disposition in the design (D2) and is Phase 3;
-	// until it exists it must be refused here rather than fall through to a
-	// kick that disposes of nothing.
+	// test. AUCTION was refused here until Phase 3 existed, because accepting
+	// it would have marked a player gone and left their estate in limbo; it is
+	// accepted now. frontend/types/payloads.ts gains the third arm in the same
+	// commit as this line (BD-6), so the picker can never send a disposition
+	// this switch rejects.
 	switch disposition {
-	case "BANK", "FREEZE":
-		// valid - the transaction below switches on these same two values
+	case "BANK", "FREEZE", "AUCTION":
+		// valid - the estate write below switches on these same three values
 	default:
 		return fmt.Errorf("invalid disposition: %s", disposition)
 	}
@@ -899,7 +903,37 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 		}
 	}
 
-	notification := kickNotification(target.Name, disposition, successor.Name)
+	// The lots, read before the transaction rather than inside it, for two
+	// reasons: the notification has to say whether there was anything to
+	// auction at all, and the queue is then built once instead of on every
+	// transaction retry.
+	//
+	// PropertyIndex order is board order (D16), and the sort is the ordering
+	// rather than a convenience - Mongo's natural order would put Boardwalk
+	// before Mediterranean Avenue about as often as not, and a player cannot
+	// tell a shuffled auction from a correct one by looking at it.
+	//
+	// Reading outside the transaction is the shape freeParking already uses
+	// for its own player read. Nothing can move a kicked player's deeds
+	// between here and the write except an unauthorized MANAGE_PROPERTIES from
+	// another player, which is a pre-existing hole - handleManageProperties
+	// does not check who owns the deed - and not this feature's to close.
+	var lots []models.Property
+	if disposition == "AUCTION" {
+		cursor, err := config.DB.Collection("Property").Find(
+			context.Background(),
+			bson.M{"roomId": roomObjID, "playerId": targetObjID},
+			options.Find().SetSort(bson.D{{Key: "propertyIndex", Value: 1}}),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to read the properties to auction: %w", err)
+		}
+		if err := cursor.All(context.Background(), &lots); err != nil {
+			return fmt.Errorf("failed to decode the properties to auction: %w", err)
+		}
+	}
+
+	notification := kickNotification(target.Name, disposition, successor.Name, len(lots))
 
 	// One transaction, following freeParking above - the only other
 	// multi-document write in this app - and deliberately not
@@ -942,8 +976,49 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 				return nil, fmt.Errorf("failed to return the properties to the bank: %w", err)
 			}
 		}
+		if disposition == "AUCTION" && len(lots) > 0 {
+			// The deeds stay on the kicked player for the length of the
+			// auction, deliberately. Clearing playerId here would put every
+			// one of them into GetAvailableProperties - which filters on
+			// exactly playerId being nil (controllers/propertyControllers.go)
+			// - so anyone in the room could buy Boardwalk from the Bank at its
+			// face price while it was still a lot, undercutting the auction it
+			// is meant to be sold at. Each lot's own close is what moves the
+			// deed, to the winner or to the Bank.
+			queue := make([]primitive.ObjectID, 0, len(lots)-1)
+			for _, lot := range lots[1:] {
+				queue = append(queue, lot.ID)
+			}
+
+			// Conditional on no auction already running.
+			// bson.M{"auction": nil} matches a missing key as well as an
+			// explicit null, so this is the "no auction" test both for a room
+			// that has never had one and for a room whose last auction was
+			// $unset by its final close. Without the clause a second AUCTION
+			// kick would overwrite a live auction's lot, queue and high bid,
+			// and the first auction's bidders would be bidding on someone
+			// else's estate with nothing erroring anywhere.
+			result, err := config.DB.Collection("Room").UpdateOne(
+				ctx,
+				bson.M{"_id": roomObjID, "auction": nil},
+				bson.M{"$set": bson.M{"auction": models.Auction{
+					KickedPlayerID: targetObjID,
+					PropertyID:     lots[0].ID,
+					Queue:          queue,
+					HighBid:        0,
+					HighBidderID:   nil,
+				}}},
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to open the auction: %w", err)
+			}
+			if result.MatchedCount == 0 {
+				return nil, errors.New("an auction is already running in this room")
+			}
+		}
 		// FREEZE writes nothing to any property (D4). The deeds stay against
 		// the player, houses intact, which is why the document has to survive.
+		// AUCTION writes no property either - see above.
 
 		// isBanker:false alongside isActive:false is a no-op for a player who
 		// was not the banker, and is the demotion half of the succession for
@@ -998,6 +1073,24 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 		},
 	})
 
+	if disposition == "AUCTION" && len(lots) > 0 {
+		// A second message rather than a longer kick sentence: the kick says
+		// the estate is going to auction, this says which deed is open. They
+		// are two events in the room's log because they are two things a
+		// player needs to be able to read back separately.
+		opened := lotOpenNotification(lots[0].Name)
+		rm.CreateEventHistory(opened, roomObjID)
+		rm.Broadcast(client.Room, Message{
+			Type: "AUCTION_STARTED",
+			Payload: map[string]interface{}{
+				"notification":   opened,
+				"propertyId":     lots[0].ID.Hex(),
+				"kickedPlayerId": targetIdStr,
+				"lotCount":       len(lots),
+			},
+		})
+	}
+
 	closed := rm.CloseClientByPlayerID(client.Room, targetIdStr)
 	log.Printf("Kick complete in room %s: removed player %s, closed %d connection(s)", client.Room, targetIdStr, closed)
 
@@ -1017,8 +1110,14 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 // set one would be dropped silently to the room and logged only on the VM -
 // a kick that worked and that nobody saw, which looks exactly like a kick that
 // did nothing. The phrase "from the game" is load-bearing beyond the copy: it
-// is what eventTypeFor keys the kick's icon on.
-func kickNotification(targetName, disposition, successorName string) string {
+// is what eventTypeFor keys the kick's icon on, and every arm here including
+// the auction ones carries it.
+//
+// lotCount is how many deeds the target holds, and it is a parameter rather
+// than something this function could work out, because AUCTION is the one
+// disposition whose sentence depends on it: saying "their properties go up for
+// auction" for a player who holds none is a promise no lot will ever keep.
+func kickNotification(targetName, disposition, successorName string, lotCount int) string {
 	var text string
 
 	switch disposition {
@@ -1026,6 +1125,12 @@ func kickNotification(targetName, disposition, successorName string) string {
 		text = fmt.Sprintf("Banker removed %s from the game. Their properties returned to the Bank.", targetName)
 	case "FREEZE":
 		text = fmt.Sprintf("Banker removed %s from the game. Their properties stay where they are.", targetName)
+	case "AUCTION":
+		if lotCount == 0 {
+			text = fmt.Sprintf("Banker removed %s from the game. They had no properties to auction.", targetName)
+		} else {
+			text = fmt.Sprintf("Banker removed %s from the game. Their properties go up for auction.", targetName)
+		}
 	default:
 		// Unreachable: disposition is validated in handleKickPlayer before any
 		// read. Kept so this switch can never fall through with text unset.
@@ -1037,6 +1142,698 @@ func kickNotification(targetName, disposition, successorName string) string {
 	}
 
 	return text
+}
+
+// --- the live auction (D14-D18) ---
+//
+// Two inbound message types and one piece of state. handleKickPlayer opens an
+// auction when its disposition is AUCTION; PLACE_BID raises the high bid on the
+// open lot; CLOSE_AUCTION is the banker's hammer, and it is the only thing that
+// ends a lot. There is no timer, no ticker and no deadline anywhere in this
+// package, which is D14's whole point: a countdown racing a bid to determine
+// one winner is exactly the silent failure this phase exists not to have.
+//
+// The state is a models.Auction on the Room document rather than a field on
+// RoomManager (D18). Everything below therefore reasons about one Mongo
+// document that several goroutines can reach at once, and the correctness
+// argument is the same in both handlers: never decide from a value you read and
+// then write as though it were still true.
+//
+//   - A bid raises the high bid with a single conditional UpdateOne whose
+//     filter carries the comparison. Two bids that arrive together are ordered
+//     by Mongo's single-document atomicity, not by which goroutine read first,
+//     so exactly one of them matches and the other is told it was beaten.
+//   - A close reads inside a transaction and then pins its write to exactly the
+//     (lot, high bid, high bidder) triple it read. A bid that lands mid-close
+//     makes the close fail and say so, rather than hammering on a bid the
+//     banker never saw.
+//
+// The rules themselves live in pure functions - bidRejection, outcomeForClose,
+// advanceAuction, closeAuthorized - because config.DB is a nil *mongo.Database
+// in a test binary, so a rule written inside a handler below its first Mongo
+// call is a rule no test in this repo can reach.
+
+// wholeDollars converts a JSON number to whole dollars, refusing anything that
+// is not one.
+//
+// handlePropertyPurchase takes its price the same way and simply truncates
+// (int(priceFloat)). A bid does not, because a silently truncated 120.9 is a
+// bid the bidder did not make, and it is the truncated figure that the
+// settlement charges and that every other bidder has to beat.
+func wholeDollars(amount float64) (int, error) {
+	if math.IsNaN(amount) || math.IsInf(amount, 0) || amount != math.Trunc(amount) {
+		return 0, fmt.Errorf("invalid amount: %v is not a whole number of dollars", amount)
+	}
+	if amount > math.MaxInt32 || amount < math.MinInt32 {
+		return 0, fmt.Errorf("invalid amount: %v is out of range", amount)
+	}
+	return int(amount), nil
+}
+
+// bidRejection reports why amount is not a valid bid on auction by bidder, or
+// nil if it is.
+//
+// Pure, and taking the read values rather than doing the reads itself, so that
+// every rule here is one a test can reach. The order is the order a player
+// would want to hear about a problem: what they are bidding on, whether they
+// may bid at all, whether the number beats the field, and only then whether
+// they can afford it.
+func bidRejection(auction models.Auction, lotID, bidderID primitive.ObjectID, amount, bidderBalance int) error {
+	if auction.PropertyID != lotID {
+		// This is also the "the bid arrived after the hammer" case. A close
+		// advances auction.propertyId to the next deed, so a bid still naming
+		// the lot that just closed lands here instead of being applied to a
+		// deed nobody bid that amount on.
+		return errors.New("that lot is no longer open for bidding")
+	}
+	if bidderID == auction.KickedPlayerID {
+		// They have no socket after the kick's force-close and no standing in
+		// the room, but a payload carries whatever player id it likes and
+		// nothing else on this path would catch it.
+		return errors.New("a removed player cannot bid on their own estate")
+	}
+	if amount <= auction.HighBid {
+		// D15: a lot opens at $0 and the minimum raise is $1, which on whole
+		// dollars is exactly "has to beat the current high bid". An opening
+		// bid is the same comparison against a high bid of 0.
+		return fmt.Errorf("a bid has to beat the current high bid of $%d", auction.HighBid)
+	}
+	if bidderBalance < amount {
+		// D17's first check. The second is at settlement, because a bidder can
+		// pay rent between bidding and the hammer - checking once is the bug,
+		// checking twice is the decision.
+		return fmt.Errorf("insufficient funds: a $%d bid is more than the $%d available", amount, bidderBalance)
+	}
+	return nil
+}
+
+// closeOutcome is what a close does with the open lot.
+type closeOutcome string
+
+const (
+	lotSold       closeOutcome = "SOLD"
+	lotNoBid      closeOutcome = "NO_BID"
+	lotWinnerGone closeOutcome = "WINNER_GONE"
+	lotCannotPay  closeOutcome = "CANNOT_PAY"
+)
+
+// outcomeForClose decides what happens to the open lot, from values read inside
+// the settlement transaction. This is where D17's second check lives.
+//
+// Three of the four outcomes put the deed in the Bank's hands, and that is a
+// decision rather than a coincidence of the code. D16 already settled that a
+// lot nobody bid on returns to the bank; a winner who cannot pay and a winner
+// who has been removed from the room since bidding are the same situation
+// reached by other routes. Zach's call, 2026-09-17: treat all three the same
+// way, rather than opening the re-auction / next-highest-bidder / bank question
+// that D17's argument-against exists to avoid. The sentence the room reads says
+// which of the three happened, so the outcome is never silent.
+//
+// winnerFound is false when the high bidder is no longer a live player in this
+// room, in which case winnerBalance is not read.
+func outcomeForClose(auction models.Auction, winnerFound bool, winnerBalance int) closeOutcome {
+	if auction.HighBidderID == nil || auction.HighBid <= 0 {
+		return lotNoBid
+	}
+	if !winnerFound {
+		return lotWinnerGone
+	}
+	if winnerBalance < auction.HighBid {
+		return lotCannotPay
+	}
+	return lotSold
+}
+
+// winnerStatus turns the high bidder's read into the two facts the settlement
+// needs: whether they still count as the winner, and whether the read failed in
+// a way that has to abort the close rather than be taken as "they left".
+//
+// This exists because of the bug it prevents, which the Deep review of this
+// phase found and which needed no concurrency at all to reach. The first
+// version of this code was `if err == nil { winnerFound = winner.IsActive }`,
+// so *every* error - a dropped connection to Mongo as easily as a missing
+// document - became "the winner is gone": the deed went to the Bank, the real
+// high bidder was neither charged nor given it, and the room was told they had
+// left the game. A wrong winner, silently, from one flaky read.
+//
+// A Player document is never deleted (D11), and every highBidderId was written
+// from a room-scoped active-player read, so ErrNoDocuments here genuinely does
+// mean gone. Anything else is the read failing, and a failing read must not be
+// allowed to decide who owns a property. Returned as an error it aborts the
+// attempt; if it carries a transient label WithTransaction retries the whole
+// callback, and if it does not, nothing settles and the banker is told.
+func winnerStatus(readErr error, winner models.Player) (found bool, fatal error) {
+	switch {
+	case readErr == nil:
+		return winner.IsActive, nil
+	case errors.Is(readErr, mongo.ErrNoDocuments):
+		return false, nil
+	default:
+		return false, fmt.Errorf("failed to read the winning bidder: %w", readErr)
+	}
+}
+
+// advanceAuction is the auction after the open lot closes: the next deed in the
+// queue, opened at $0 with no bidder, or nil when the queue is empty and the
+// auction is over. It is the only place the queue advances.
+//
+// The remaining queue is copied rather than resliced. The slice this returns is
+// marshalled straight into the Room document, and an alias into the caller's
+// backing array is the kind of sharing that is correct until someone appends to
+// one of the two.
+func advanceAuction(auction models.Auction) *models.Auction {
+	if len(auction.Queue) == 0 {
+		return nil
+	}
+
+	rest := make([]primitive.ObjectID, len(auction.Queue)-1)
+	copy(rest, auction.Queue[1:])
+
+	return &models.Auction{
+		KickedPlayerID: auction.KickedPlayerID,
+		PropertyID:     auction.Queue[0],
+		Queue:          rest,
+		HighBid:        0,
+		HighBidderID:   nil,
+	}
+}
+
+// closeAuthorized reports whether closer may close an auction lot.
+//
+// This is the only server-side isBanker check in the product, and it is a
+// deliberate exception rather than the start of a policy. PLAN.md section 4
+// reserves general isBanker enforcement as not built, on purpose, and every
+// other action in this app still trusts the client's own isBanker; the close is
+// carved out because it is the single act that fixes a winner and moves the
+// money (D14), so "whoever holds the room code can hammer someone else's
+// auction" is a different proposition from "whoever holds the room code can
+// move their own money".
+func closeAuthorized(closer models.Player) error {
+	if !closer.IsActive {
+		// Unreachable today: the read that produces closer filters on
+		// isActive: true. Kept so the function is total, and so the rule
+		// survives a later change to that filter rather than quietly leaving
+		// with it.
+		return errors.New("a removed player cannot close a lot")
+	}
+	if !closer.IsBanker {
+		return errors.New("only the Banker can close a lot")
+	}
+	return nil
+}
+
+// lotOpenNotification is the sentence a lot opening raises. The $0 is D15 and
+// is worth saying out loud: it is what makes "nobody wants this deed" a lot
+// that closes with no bid rather than an unmet reserve nobody can see.
+func lotOpenNotification(lotName string) string {
+	return fmt.Sprintf("%s is up for auction. Bidding starts at $0.", lotName)
+}
+
+// bidNotification is the sentence a bid raises. It is broadcast but never
+// written to the event history: a lot can take twenty bids and the log is a
+// record of what happened to the money, not of the bidding. What is live rather
+// than historical lives on the Room document (D18).
+func bidNotification(bidderName, lotName string, amount int) string {
+	return fmt.Sprintf("%s bid $%d on %s.", bidderName, amount, lotName)
+}
+
+// lotClosedNotification is the one string a close broadcasts and the one
+// CreateEventHistory stores for it.
+//
+// Every arm returns text, including the default that should not occur, for the
+// reason kickNotification's does: Broadcast refuses a payload whose
+// notification is present and empty, so an arm that forgot to set one would be
+// dropped silently to the room and logged only on the VM - a lot that closed,
+// and moved a deed and a balance, that nobody saw close.
+//
+// The trailing clause is always one of the two. A player needs to know whether
+// to keep watching, and the alternative - saying nothing when the auction ends
+// - makes the last lot indistinguishable from a lot whose next deed never
+// opened.
+func lotClosedNotification(outcome closeOutcome, lotName, winnerName string, price int, nextLotName string) string {
+	var text string
+
+	switch outcome {
+	case lotSold:
+		text = fmt.Sprintf("%s won %s for $%d.", winnerName, lotName, price)
+	case lotNoBid:
+		text = fmt.Sprintf("Nobody bid on %s. It goes back to the Bank.", lotName)
+	case lotCannotPay:
+		text = fmt.Sprintf("%s couldn't cover the $%d bid, so %s goes back to the Bank.", winnerName, price, lotName)
+	case lotWinnerGone:
+		text = fmt.Sprintf("%s is no longer in the game, so %s goes back to the Bank.", winnerName, lotName)
+	default:
+		text = fmt.Sprintf("%s is no longer up for auction.", lotName)
+	}
+
+	if nextLotName != "" {
+		text += fmt.Sprintf(" %s is up next.", nextLotName)
+	} else {
+		text += " That's the last of them."
+	}
+
+	return text
+}
+
+// handlePlaceBid raises the high bid on the open lot.
+//
+// Every payload rejection is above the first Mongo call, and every rule that
+// needs the auction's state is in bidRejection, which takes read values. What
+// is left here is the reads and one conditional write.
+func (rm *RoomManager) handlePlaceBid(client *Client, message Message) error {
+	payload, ok := message.Payload.(map[string]interface{})
+	if !ok {
+		return errors.New("invalid payload format")
+	}
+
+	roomIdStr, ok := payload["roomId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for roomId")
+	}
+	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid room ID: %w", err)
+	}
+
+	propertyIdStr, ok := payload["propertyId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for propertyId")
+	}
+	propObjID, err := primitive.ObjectIDFromHex(propertyIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid property ID: %w", err)
+	}
+
+	bidderIdStr, ok := payload["bidderId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for bidderId")
+	}
+	bidderObjID, err := primitive.ObjectIDFromHex(bidderIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid bidder ID: %w", err)
+	}
+
+	// A JSON number, like handlePropertyPurchase's price, and unlike
+	// freeParking's string amount - the string there is the shape of the keypad
+	// that produces it, not a contract worth copying into a new handler.
+	amountFloat, ok := payload["amount"].(float64)
+	if !ok {
+		return errors.New("invalid payload: expected number for amount")
+	}
+	amount, err := wholeDollars(amountFloat)
+	if err != nil {
+		return err
+	}
+	if amount < 1 {
+		// A lot opens at $0 with no bidder, so the smallest bid that can exist
+		// is $1 (D15). It is rejected here rather than in bidRejection because
+		// it is a fact about the payload: it does not depend on any state.
+		return errors.New("a bid has to be at least $1")
+	}
+
+	// --- the first database call. Nothing below here is reachable from a test
+	// on a machine with no Mongo; it panics on the nil config.DB instead. ---
+
+	var room models.Room
+	err = config.DB.Collection("Room").FindOne(context.Background(), bson.M{"_id": roomObjID}).Decode(&room)
+	if err != nil {
+		return fmt.Errorf("failed to find the room: %w", err)
+	}
+	if room.Auction == nil {
+		return errors.New("there is no auction running in this room")
+	}
+
+	// Scoped to this room and to active players: D7 opens the auction to every
+	// remaining player in the room, which is the banker included and a removed
+	// player excluded. A bidder from another room would otherwise be able to
+	// spend their own room's money here.
+	var bidder models.Player
+	err = config.DB.Collection("Player").FindOne(context.Background(), bson.M{
+		"_id":      bidderObjID,
+		"roomId":   roomObjID,
+		"isActive": true,
+	}).Decode(&bidder)
+	if err != nil {
+		return fmt.Errorf("failed to find the bidder: %w", err)
+	}
+
+	if err := bidRejection(*room.Auction, propObjID, bidderObjID, amount, bidder.Balance); err != nil {
+		return err
+	}
+
+	var lot models.Property
+	err = config.DB.Collection("Property").FindOne(context.Background(), bson.M{
+		"_id":    propObjID,
+		"roomId": roomObjID,
+	}).Decode(&lot)
+	if err != nil {
+		return fmt.Errorf("failed to find the lot: %w", err)
+	}
+
+	// The raise, as one conditional update rather than a write that trusts the
+	// read above it. "auction.highBid < amount" is the same comparison
+	// bidRejection already made, restated as a filter, because between that
+	// read and this write another bidder's frame can have raised the bid on
+	// another goroutine: a plain $set would then overwrite a higher bid with a
+	// lower one and hand the lot to the wrong player, with green gates and no
+	// error anywhere. Mongo applies one document's update atomically, so of two
+	// bids that arrive together exactly one matches.
+	//
+	// The propertyId clause is what stops a bid that arrives after its lot
+	// closed. A close advances auction.propertyId, so the filter no longer
+	// matches and the raise cannot land on the next deed.
+	result, err := config.DB.Collection("Room").UpdateOne(
+		context.Background(),
+		bson.M{
+			"_id":                roomObjID,
+			"auction.propertyId": propObjID,
+			"auction.highBid":    bson.M{"$lt": amount},
+		},
+		bson.M{"$set": bson.M{
+			"auction.highBid":      amount,
+			"auction.highBidderId": bidderObjID,
+		}},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to place the bid: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		// Two different things land here and the bidder cannot tell them apart
+		// from the state they can see, so the sentence says both: either
+		// someone outbid them between the read above and this write, or the
+		// banker closed the lot in that same window.
+		return errors.New("that bid did not land - the lot was outbid or closed first")
+	}
+
+	notification := bidNotification(bidder.Name, lot.Name, amount)
+	rm.Broadcast(client.Room, Message{
+		Type: "BID_PLACED",
+		Payload: map[string]interface{}{
+			"notification": notification,
+			"propertyId":   propertyIdStr,
+			"bidderId":     bidderIdStr,
+			"amount":       amount,
+		},
+	})
+
+	return nil
+}
+
+// handleCloseAuction is the banker's hammer: it closes the open lot, settles
+// it, and advances to the next deed or ends the auction (D14, D16).
+//
+// The settlement is one session.WithTransaction, following freeParking and
+// handleKickPlayer and deliberately not controllers.PurchaseProperty, which is
+// two bare writes with no session and no floor. A close that hands over the
+// deed and then fails to charge the winner is a free property; one that charges
+// and fails to hand over is money for nothing. Neither half may land alone.
+func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error {
+	payload, ok := message.Payload.(map[string]interface{})
+	if !ok {
+		return errors.New("invalid payload format")
+	}
+
+	roomIdStr, ok := payload["roomId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for roomId")
+	}
+	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid room ID: %w", err)
+	}
+
+	closerIdStr, ok := payload["playerId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for playerId")
+	}
+	closerObjID, err := primitive.ObjectIDFromHex(closerIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid player ID: %w", err)
+	}
+
+	// The lot the banker is looking at, and it is required.
+	//
+	// The close could act on whatever lot happens to be open and take no
+	// propertyId at all, and that is wrong in a way worth spelling out, because
+	// it is subtle and it is the one this handler was written with first. Two
+	// CLOSE_AUCTION frames - a double tap, or one frame retried by a flaky
+	// reconnect - both read the same open lot, both try the pinned write, and
+	// one of them loses the write conflict. WithTransaction then retries the
+	// loser's callback, which re-reads and finds the NEXT lot open, pins on
+	// that, and settles it. One banker, one intention, two deeds sold, and
+	// nothing anywhere reports a problem.
+	//
+	// Naming the lot makes the close idempotent per lot: the retry finds its
+	// named lot is no longer the open one and is refused. It is a precondition,
+	// not a selector - the server still settles only the lot that is actually
+	// open - which is also why a banker whose screen is stale is told so rather
+	// than hammering a deed they were not looking at. handlePlaceBid already
+	// requires the bidder to name the lot, for exactly this reason.
+	lotIdStr, ok := payload["propertyId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for propertyId")
+	}
+	lotObjID, err := primitive.ObjectIDFromHex(lotIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid property ID: %w", err)
+	}
+
+	// And whose estate, because a property id alone does not identify an
+	// auction lot - it identifies a deed, and the same deed can be the open lot
+	// of two different auctions.
+	//
+	// The trace, from this phase's Deep review: auction 1's last lot L closes
+	// sold to W; W is then kicked with AUCTION; L is W's lowest-index deed, so
+	// auction 2 opens on L at $0. A CLOSE frame naming L, queued on a device
+	// that missed both the PLAYER_KICKED and AUCTION_STARTED broadcasts, then
+	// passes a propertyId-only check and hammers auction 2's first lot to the
+	// Bank with nobody able to bid. Narrow, and silent, which is the
+	// combination this phase exists to not ship.
+	//
+	// (kickedPlayerId, propertyId) is a unique auction-lot identity, because a
+	// player cannot be kicked twice - the kick's own mark-gone write is
+	// filtered on isActive: true.
+	kickedIdStr, ok := payload["kickedPlayerId"].(string)
+	if !ok {
+		return errors.New("invalid payload: expected string for kickedPlayerId")
+	}
+	kickedObjID, err := primitive.ObjectIDFromHex(kickedIdStr)
+	if err != nil {
+		return fmt.Errorf("invalid kicked player ID: %w", err)
+	}
+
+	// --- the first database call. Nothing below here is reachable from a test
+	// on a machine with no Mongo; it panics on the nil config.DB instead. ---
+
+	playerColl := config.DB.Collection("Player")
+	propColl := config.DB.Collection("Property")
+	roomColl := config.DB.Collection("Room")
+
+	var closer models.Player
+	err = playerColl.FindOne(context.Background(), bson.M{
+		"_id":      closerObjID,
+		"roomId":   roomObjID,
+		"isActive": true,
+	}).Decode(&closer)
+	if err != nil {
+		return fmt.Errorf("failed to find the player closing the lot: %w", err)
+	}
+	if err := closeAuthorized(closer); err != nil {
+		return err
+	}
+
+	var notification string
+	var closedLotID primitive.ObjectID
+	var winnerID *primitive.ObjectID
+	var price int
+
+	session, err := config.DB.Client().StartSession()
+	if err != nil {
+		return fmt.Errorf("failed to start session: %w", err)
+	}
+	defer session.EndSession(context.Background())
+
+	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+		// WithTransaction re-runs this callback on a write conflict, so every
+		// value it decides from is read inside it and every captured variable
+		// is reset at the top. Re-reading is not caution here: the point is
+		// that a bid committed by another goroutine between attempts has to be
+		// seen by the retry rather than settled around.
+		notification, closedLotID, winnerID, price = "", primitive.NilObjectID, nil, 0
+
+		var room models.Room
+		if err := roomColl.FindOne(ctx, bson.M{"_id": roomObjID}).Decode(&room); err != nil {
+			return nil, fmt.Errorf("failed to find the room: %w", err)
+		}
+		if room.Auction == nil {
+			return nil, errors.New("there is no auction running in this room")
+		}
+		auction := *room.Auction
+		if auction.PropertyID != lotObjID || auction.KickedPlayerID != kickedObjID {
+			// Another close already advanced past this lot, or the banker's
+			// screen is behind, or this frame belongs to an auction that has
+			// since ended. All of them are "you are not looking at the lot that
+			// is open", and none of them should settle anything.
+			return nil, errors.New("that is not the lot that is open - the auction has moved on")
+		}
+		closedLotID = auction.PropertyID
+
+		var lot models.Property
+		if err := propColl.FindOne(ctx, bson.M{"_id": auction.PropertyID, "roomId": roomObjID}).Decode(&lot); err != nil {
+			return nil, fmt.Errorf("failed to find the open lot: %w", err)
+		}
+
+		// Read without an isActive clause, so a high bidder who has been
+		// removed since bidding still yields a name for the sentence; whether
+		// they still count is the IsActive check below, not the absence of a
+		// document. A player document is never deleted (D11), which is what
+		// makes that distinction available at all.
+		var winner models.Player
+		winnerFound := false
+		if auction.HighBidderID != nil {
+			readErr := playerColl.FindOne(ctx, bson.M{
+				"_id":    *auction.HighBidderID,
+				"roomId": roomObjID,
+			}).Decode(&winner)
+
+			var fatal error
+			winnerFound, fatal = winnerStatus(readErr, winner)
+			if fatal != nil {
+				return nil, fatal
+			}
+		}
+
+		outcome := outcomeForClose(auction, winnerFound, winner.Balance)
+
+		// The claim on the lot, pinned to exactly the state the reads above
+		// saw.
+		//
+		// Be clear about what is actually protecting this, because the obvious
+		// reading is wrong and the Deep review of this phase caught it. Every
+		// read in this callback uses ctx, so they all come from one snapshot,
+		// and the pin is built from that snapshot - which means the pin cannot
+		// fail to match on the attempt that read it. What stops a bid landing
+		// mid-close is not the pin: it is that a transactional write to a
+		// document modified since the snapshot raises a WriteConflict, which
+		// carries a transient label, which makes WithTransaction abort and
+		// re-run this whole callback against fresh state.
+		//
+		// So a bid that commits before this close commits WINS - the retry
+		// re-reads it and settles to that bidder at that price. That is the
+		// right outcome, because the bid really did arrive before the hammer,
+		// and it is the opposite of what an earlier version of this comment
+		// claimed. The MatchedCount check below is kept as defence against a
+		// future edit that reads outside the transaction, not because it fires
+		// today.
+		//
+		// The lot precondition above is the load-bearing part, and it is
+		// load-bearing precisely because of this retry: without it, a second
+		// close frame whose first attempt lost the conflict would re-read, find
+		// the NEXT lot open, and settle that one instead.
+		next := advanceAuction(auction)
+		pin := bson.M{
+			"_id":                  roomObjID,
+			"auction.propertyId":   auction.PropertyID,
+			"auction.highBid":      auction.HighBid,
+			"auction.highBidderId": nil,
+		}
+		if auction.HighBidderID != nil {
+			pin["auction.highBidderId"] = *auction.HighBidderID
+		}
+		update := bson.M{"$unset": bson.M{"auction": ""}}
+		if next != nil {
+			update = bson.M{"$set": bson.M{"auction": *next}}
+		}
+		result, err := roomColl.UpdateOne(ctx, pin, update)
+		if err != nil {
+			return nil, fmt.Errorf("failed to close the lot: %w", err)
+		}
+		if result.MatchedCount == 0 {
+			// Unreachable while every read above is on ctx, per the comment
+			// there. If it ever fires, the auction changed underneath a read
+			// that was not in the transaction, and settling on it would be
+			// guessing.
+			return nil, errors.New("the auction changed while that lot was closing - check the high bid and close it again")
+		}
+
+		// The deed, razed and unmortgaged on every arm including the sale.
+		//
+		// The unsold arms are D16 plus D13's raze - the same write
+		// handleKickPlayer makes for the BANK disposition, and for the same
+		// reason: manager.HandlePropertySaleMortgage's SELL case at
+		// manager/propertyManager.go:53 sets only {playerId: nil, isMortgaged:
+		// false}, so without the raze a returned hotel-bearing deed reappears
+		// in GetAvailableProperties at its face price and the next buyer
+		// inherits the development for free. SELL is left alone deliberately
+		// (D13); the two paths disagree on purpose and this comment is the
+		// record of it.
+		//
+		// The sold arm rases too, which D13 does not literally cover and which
+		// is Zach's call, 2026-09-17. D13's own reasoning applies unchanged: if
+		// a sold lot kept its houses, bidding $1 on an unwanted hotel deed
+		// would be strictly better than letting it go unsold, because the
+		// unsold path razes and the sold path would not. That asymmetry is the
+		// exact shape of hole D13 exists to close. It is also the real rule -
+		// buildings go back to the bank when a player is out of the game - so
+		// what is auctioned is the deed, not the development on it.
+		deed := bson.M{"playerId": nil, "isMortgaged": false, "developmentLevel": 0}
+		if outcome == lotSold {
+			deed["playerId"] = winner.ID
+		}
+		if _, err := propColl.UpdateOne(ctx,
+			bson.M{"_id": auction.PropertyID, "roomId": roomObjID},
+			bson.M{"$set": deed},
+		); err != nil {
+			return nil, fmt.Errorf("failed to hand over the deed: %w", err)
+		}
+
+		if outcome == lotSold {
+			if _, err := playerColl.UpdateOne(ctx,
+				bson.M{"_id": winner.ID},
+				bson.M{"$inc": bson.M{"balance": -auction.HighBid}},
+			); err != nil {
+				return nil, fmt.Errorf("failed to charge the winning bid: %w", err)
+			}
+			winnerID = &winner.ID
+			price = auction.HighBid
+		}
+
+		nextLotName := ""
+		if next != nil {
+			var nextLot models.Property
+			if err := propColl.FindOne(ctx, bson.M{
+				"_id":    next.PropertyID,
+				"roomId": roomObjID,
+			}).Decode(&nextLot); err != nil {
+				return nil, fmt.Errorf("failed to find the next lot: %w", err)
+			}
+			nextLotName = nextLot.Name
+		}
+
+		notification = lotClosedNotification(outcome, lot.Name, winner.Name, auction.HighBid, nextLotName)
+		return nil, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("transaction failed: %w", err)
+	}
+
+	rm.CreateEventHistory(notification, roomObjID)
+
+	closedPayload := map[string]interface{}{
+		"notification": notification,
+		"propertyId":   closedLotID.Hex(),
+	}
+	if winnerID != nil {
+		closedPayload["winnerId"] = winnerID.Hex()
+		closedPayload["amount"] = price
+	}
+	rm.Broadcast(client.Room, Message{
+		Type:    "AUCTION_LOT_CLOSED",
+		Payload: closedPayload,
+	})
+
+	return nil
 }
 
 // eventTypeFor picks the {colour, emoji} pair an event-history row is drawn

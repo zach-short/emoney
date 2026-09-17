@@ -4,7 +4,8 @@ export type WebSocketPayload =
   | PurchasePropertyPayload
   | BankerTransactionPayload
   | ManagePropertiesPayload
-  | FreeParkingPayload;
+  | FreeParkingPayload
+  | KickPlayerPayload;
 
 export type TransferType =
   | "SEND"
@@ -59,6 +60,24 @@ export interface FreeParkingPayload {
 
 interface JoinPayload {
   playerId: string;
+}
+
+export interface KickPlayerPayload {
+  type: "KICK_PLAYER";
+  roomId: string;
+  targetPlayerId: string;
+  // Three arms, as of Phase 3. This union and the Go handler's guard
+  // (`backend/websocket/websocketManager.go`, handleKickPlayer) are changed in
+  // the same commit, always: they are the two halves of one contract and
+  // nothing checks they agree, so a member here that the guard refuses
+  // typechecks straight into a runtime rejection (PLAN.md BD-6). That is why
+  // "AUCTION" was absent until the auction existed rather than present and
+  // disabled.
+  disposition: "BANK" | "FREEZE" | "AUCTION";
+  // Required by the server only when the target holds the banker role (D5), and
+  // refused when they do not. Omitted, null and "" all read as "no successor
+  // named" there, so leaving it undefined is the correct non-banker shape.
+  successorPlayerId?: string;
 }
 
 export interface PurchasePropertyPayload {
