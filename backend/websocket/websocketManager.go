@@ -89,7 +89,12 @@ func (rm *RoomManager) Broadcast(room string, message Message) {
 	rm.mu.RLock()
 	if clients, ok := rm.clients[room]; ok {
 		for client := range clients {
-			err := client.Conn.WriteJSON(message)
+			// Client.WriteJSON, not client.Conn.WriteJSON: rm.mu orders access
+			// to the room map, not to any one conn's writer, and two broadcasts
+			// to the same room both hold RLock while writing to the same conns.
+			// The per-client lock is what keeps one goroutine at a time inside
+			// gorilla's writer - see the Client doc comment in types.go.
+			err := client.WriteJSON(message)
 			if err != nil {
 				client.Conn.Close()
 				dead = append(dead, client)
