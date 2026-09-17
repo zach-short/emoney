@@ -99,37 +99,42 @@ func HandleWebSocket(c *gin.Context) {
 					})
 				}
 			}
+		// Every ERROR reply below goes back on this player's own conn through
+		// client.WriteJSON rather than conn.WriteJSON, because another player's
+		// action can be fanning out to this same conn from their reader
+		// goroutine at the same instant. Only the per-client lock orders the
+		// two - see the Client doc comment in types.go.
 		case "PURCHASE_PROPERTY":
 			if err := Manager.handlePropertyPurchase(client, message); err != nil {
-				conn.WriteJSON(Message{
+				client.WriteJSON(Message{
 					Type:    "ERROR",
 					Payload: err.Error(),
 				})
 			}
 		case "FREE_PARKING":
 			if err := Manager.freeParking(client, message); err != nil {
-				conn.WriteJSON(Message{
+				client.WriteJSON(Message{
 					Type:    "ERROR",
 					Payload: err.Error(),
 				})
 			}
 		case "BANKER_TRANSACTION":
 			if err := Manager.handleBankTransaction(client, message); err != nil {
-				conn.WriteJSON(Message{
+				client.WriteJSON(Message{
 					Type:    "ERROR",
 					Payload: err.Error(),
 				})
 			}
 		case "TRANSFER":
 			if err := Manager.handleTransfer(client, message); err != nil {
-				conn.WriteJSON(Message{
+				client.WriteJSON(Message{
 					Type:    "ERROR",
 					Payload: err.Error(),
 				})
 			}
 		case "MANAGE_PROPERTIES":
 			if err := Manager.handleManageProperties(client, message); err != nil {
-				conn.WriteJSON(Message{
+				client.WriteJSON(Message{
 					Type:    "ERROR",
 					Payload: err.Error(),
 				})
