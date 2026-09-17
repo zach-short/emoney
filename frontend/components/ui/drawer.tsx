@@ -43,7 +43,11 @@ const DrawerContent = React.forwardRef<
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
+        // inset-x-0 + max-width + auto margins centres the sheet on wide
+        // screens without a transform -- vaul owns the inline transform for
+        // the drag/snap animation, so a translate class here would be lost.
         "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        "sm:mx-auto sm:max-w-2xl sm:rounded-t-2xl",
         className
       )}
       {...props}

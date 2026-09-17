@@ -12,6 +12,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // The room's notifications are top-center and were landing squarely on
+      // the room name in the sticky header (h-16). Clear it.
+      offset={76}
       toastOptions={{
         classNames: {
           toast:

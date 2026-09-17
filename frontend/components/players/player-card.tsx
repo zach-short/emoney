@@ -2,7 +2,7 @@
 import { Player } from "@/types/schema";
 import { josephinBold } from "../ui/fonts";
 import { PlayerDetails } from "./player-card-content";
-import { ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import { BankerTransactionPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
 import {
   Drawer,
   DrawerContent,
@@ -37,7 +37,7 @@ const PlayerCard = ({
   onBankerTransaction: (
     amount: string,
     playerId: string,
-    transactionType: string
+    transactionType: BankerTransactionPayload["transactionType"]
   ) => void;
   onManageProperties?: (
     amount: number,
@@ -57,13 +57,13 @@ const PlayerCard = ({
               <DrawerTrigger asChild>
                 <button
                   style={{ backgroundColor: color }}
-                  className={`h-16 border-[1px] text-black ${josephinBold.className} text-center w-full border-black flex items-center justify-center text-3xl`}
+                  className={`h-16 border-[1px] text-black ${josephinBold.className} text-center w-full border-black flex items-center justify-center text-3xl transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black`}
                 >
                   {player?.name}
                 </button>
               </DrawerTrigger>
               <DrawerContent
-                className={`overflow-y-auto min-h-[90vh] bg-black w-screen`}
+                className={`overflow-y-auto min-h-[90vh] bg-black`}
               >
                 <DrawerTitle className={`hidden`}>Make an offer</DrawerTitle>
                 <MakeOffer

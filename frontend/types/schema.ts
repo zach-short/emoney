@@ -1,7 +1,10 @@
 export type Room = {
   id: string;
   name: string;
-  roomCode: string;
+  // The API serialises this as `code` (backend/models/roomModel.go). Calling it
+  // `roomCode` here typechecked fine and was always undefined at runtime, which
+  // is why the menu's Room Code row rendered blank and copied "undefined".
+  code: string;
   bankerId: string;
   createdAt: Date;
   isActive: boolean;

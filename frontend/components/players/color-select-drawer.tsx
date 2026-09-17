@@ -86,17 +86,21 @@ export function ColorSelect({ onColorSelect }: ColorSelectProps) {
         </button>
       </DrawerTrigger>
       <DrawerContent
-        className={`${sulpherBold.className} bg-black text-white h-full overflow-y-auto  px-2`}
+        className={`${sulpherBold.className} bg-black text-white max-h-[80vh] overflow-y-auto px-2 pb-4`}
       >
         <DrawerHeader>
-          <DrawerTitle className={`hidden`}>Select Color</DrawerTitle>
+          {/* `hidden` took the title out of the accessibility tree too, leaving
+              the sheet unnamed. sr-only keeps it for screen readers. */}
+          <DrawerTitle className={`sr-only`}>Select Color</DrawerTitle>
         </DrawerHeader>
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
           {colors.map((color, index) => (
             <DrawerClose
-              className="p-1 rounded border aspect-square w-full"
+              className="p-1 rounded border aspect-square w-full transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               style={{ backgroundColor: color.hex }}
               key={index}
+              aria-label={`Choose colour ${color.hex}`}
+              title={color.hex}
               onClick={() => {
                 setSelectedColor(color);
                 onColorSelect(color.hex);

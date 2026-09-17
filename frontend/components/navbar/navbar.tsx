@@ -1,4 +1,5 @@
 "use client";
+import { FreeParkingPayload } from "@/types/payloads";
 import { EventHistory, Player, Property } from "@/types/schema";
 import {
   Drawer,
@@ -17,6 +18,11 @@ import { IoCopyOutline } from "react-icons/io5";
 import { toast } from "sonner";
 import { formatTimeAgo } from "../ui/helper-funcs";
 import ReturnToMenu from "../ui/return-to-menu";
+
+// Menu rows were click-handled <div>s: no keyboard focus, no hover state, and
+// nothing telling a mouse user they were targets at all.
+const MENU_ROW =
+  "flex w-full items-center justify-between rounded-md px-2 py-2 text-left transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
 
 const Navbar = ({
   freeParking,
@@ -38,7 +44,11 @@ const Navbar = ({
     buyerId: string,
     price: number
   ) => void;
-  onFreeParkingAction: (amount: string, type: string, playerId: string) => void;
+  onFreeParkingAction: (
+    amount: string,
+    freeParkingType: FreeParkingPayload["freeParkingType"],
+    playerId: string,
+  ) => void;
   availableProperties?: Property[];
 }) => {
   const [showProperties, setShowProperties] = useState(false);
@@ -49,16 +59,20 @@ const Navbar = ({
     <>
       <Drawer>
         <DrawerTrigger asChild>
-          <div className={`border rounded-md p-2 absolute top-4 right-4 `}>
+          <button
+            type="button"
+            aria-label="Open menu"
+            className={`border rounded-md p-2 absolute right-4 top-1/2 -translate-y-1/2 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
+          >
             <AiOutlineMenu size={25} />
-          </div>
+          </button>
         </DrawerTrigger>
         <DrawerContent
           className={`${josephinNormal.className} h-[80vh] bg-black border-[1px] px-3 text-xl `}
         >
           <DrawerTitle className={`text-black`}>Menu</DrawerTitle>
 
-          <ul className={`flex flex-col h-[75vh] relative`}>
+          <ul className={`flex flex-col gap-1 h-[75vh] relative`}>
             {(showProperties || showFreeParking || showEvents) && (
               <ReturnToMenu
                 onClick={() => {
@@ -126,29 +140,40 @@ const Navbar = ({
               </>
             ) : (
               <>
-                <div
-                  className={`flex justify-between mt-2`}
-                  onClick={() => setShowProperties(true)}
-                >
-                  <li>Bank&apos;s Properties</li>
-                  <li>{availableProperties?.length || 0}</li>
-                </div>
-                <div
-                  className={`flex justify-between mt-4`}
-                  onClick={() => setShowFreeParking(true)}
-                >
-                  <li>Free Parking</li>
-                  <li>${freeParking}</li>
-                </div>
-                <div
-                  className={`flex justify-between mt-4`}
-                  onClick={() => setShowEvents(true)}
-                >
-                  <li>Event History</li>
-                  <li>{eventHistory.length}</li>
-                </div>
-                <div
-                  className={`flex justify-between mt-4 cursor-pointer hover:opacity-80 transition-opacity`}
+                <li>
+                  <button
+                    type="button"
+                    className={MENU_ROW}
+                    onClick={() => setShowProperties(true)}
+                  >
+                    <span>Bank&apos;s Properties</span>
+                    <span>{availableProperties?.length || 0}</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className={MENU_ROW}
+                    onClick={() => setShowFreeParking(true)}
+                  >
+                    <span>Free Parking</span>
+                    <span>${freeParking}</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    type="button"
+                    className={MENU_ROW}
+                    onClick={() => setShowEvents(true)}
+                  >
+                    <span>Event History</span>
+                    <span>{eventHistory.length}</span>
+                  </button>
+                </li>
+                <li>
+                  <button
+                  type="button"
+                  className={MENU_ROW}
                   onClick={() => {
                     navigator.clipboard
                       .writeText(roomCode)
@@ -163,13 +188,14 @@ const Navbar = ({
                         toast.error("Failed to copy room code");
                       });
                   }}
-                >
-                  <li>Room Code</li>
-                  <li className={`flex items-center`}>
-                    <IoCopyOutline className={`mr-1`} />
-                    {roomCode}
-                  </li>
-                </div>
+                  >
+                    <span>Room Code</span>
+                    <span className={`flex items-center`}>
+                      <IoCopyOutline className={`mr-1`} />
+                      {roomCode}
+                    </span>
+                  </button>
+                </li>
                 <div className={`absolute bottom-5 w-full`}>
                   <div className={`flex flex-col items-start w-full `}>
                     <div className={` w-full text-lg text-red-300`}>

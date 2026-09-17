@@ -11,7 +11,7 @@ import PayRequestRent from "./pay.req.rent.component";
 import { josephinBold, josephinNormal } from "../ui/fonts";
 import PlayerTags from "./player-tags";
 import ManageProperties from "./manage-properties";
-import { ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import { BankerTransactionPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
@@ -40,7 +40,7 @@ const PlayerDetails = ({
       roomId: string;
     }
   ) => void;
-  onManageProperties: (
+  onManageProperties?: (
     amount: number,
     managementType: ManagePropertiesPayload["managementType"],
     properties: { propertyId: string; count?: number }[],
@@ -49,7 +49,7 @@ const PlayerDetails = ({
   onBankerTransaction: (
     amount: string,
     playerId: string,
-    transactionType: string
+    transactionType: BankerTransactionPayload["transactionType"]
   ) => void;
 }) => {
   const [transferType, setTransferType] = useState<"SEND" | "REQUEST">("SEND");
@@ -154,10 +154,13 @@ const PlayerDetails = ({
         </div>
         <Drawer>
           <DrawerTrigger asChild>
-            <div className={`flex items-center justify-between w-full mt-14`}>
-              <div>{currentPlayer?.id === player?.id && "My"} Properties</div>
-              <div>{player?.properties?.length || 0}</div>
-            </div>
+            <button
+              type="button"
+              className={`flex items-center justify-between w-full mt-14 rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black`}
+            >
+              <span>{currentPlayer?.id === player?.id && "My"} Properties</span>
+              <span>{player?.properties?.length || 0}</span>
+            </button>
           </DrawerTrigger>
           <DrawerContent
             className={`bg-black h-[600px] px-3 text-white  mt-0 border-t border-x border-b-none`}
@@ -179,11 +182,12 @@ const PlayerDetails = ({
         {currentPlayer?.id !== player?.id && (
           <Drawer>
             <DrawerTrigger asChild>
-              <div
-                className={`shadow-xl w-[calc(100%-4rem)] text-center border rounded-full absolute bottom-6 p-4 right-1/2 transform translate-x-1/2 ${josephinBold.className}`}
+              <button
+                type="button"
+                className={`shadow-xl w-[calc(100%-4rem)] text-center border rounded-full absolute bottom-6 p-4 right-1/2 transform translate-x-1/2 transition-colors hover:bg-black hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${josephinBold.className}`}
               >
                 Pay or Request
-              </div>
+              </button>
             </DrawerTrigger>
             <DrawerContent className={`h-[90vh] bg-black px-2`}>
               <DrawerTitle className={`text-black`}>

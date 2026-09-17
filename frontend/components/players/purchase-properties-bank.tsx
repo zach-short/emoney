@@ -27,7 +27,7 @@ const SelectColorProperties = ({
     null
   );
 
-  if (!properties || properties.length === 0) {
+  if (!properties || properties.length === 0 || !player) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className={`text-xl ${josephinBold.className} text-white`}>
@@ -51,7 +51,7 @@ const SelectColorProperties = ({
   const handleConfirmPurchase = () => {
     if (!selectedProperty) return;
 
-    onPurchase(selectedProperty.id, player.id, selectedProperty.price);
+    onPurchase?.(selectedProperty.id, player.id, selectedProperty.price);
   };
 
   const handleBack = () => {
@@ -81,12 +81,14 @@ const SelectColorProperties = ({
 
     return (
       <>
-        <h1
-          className="flex items-center justify-start mb-6"
+        <button
+          type="button"
+          aria-label="Back"
+          className="flex items-center justify-start mb-6 rounded-md p-2 -ml-2 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           onClick={handleBack}
         >
           <MdArrowBackIos />
-        </h1>
+        </button>
         <div className="space-y-2">
           <div className="space-y-2">
             <h2 className="text-xl">Confirm Purchase</h2>
@@ -128,9 +130,14 @@ const SelectColorProperties = ({
         renderConfirmationView()
       ) : currentView === "properties" ? (
         <>
-          <h1 className="flex items-center justify-start" onClick={handleBack}>
+          <button
+            type="button"
+            aria-label="Back"
+            className="flex items-center justify-start rounded-md p-2 -ml-2 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            onClick={handleBack}
+          >
             <MdArrowBackIos />
-          </h1>
+          </button>
           <div className="overflow-x-auto flex gap-4">
             {groupedProperties
               .find(([group]) => group === selectedGroup)?.[1]
@@ -154,8 +161,10 @@ const SelectColorProperties = ({
             {groupedProperties.map(([group, props]) => (
               <button
                 key={group}
-                className="p-2 rounded border aspect-square w-full"
+                className="p-2 rounded border aspect-square w-full transition hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 style={{ backgroundColor: props[0].color }}
+                aria-label={`${group} (${props.length} for sale)`}
+                title={`${group} (${props.length} for sale)`}
                 onClick={() => {
                   setSelectedGroup(group);
                   setCurrentView("properties");

@@ -4,13 +4,12 @@ import PlayerCard from "@/components/players/player-card";
 import { EventHistory, Player, Property, Room } from "@/types/schema";
 import Navbar from "../navbar/navbar";
 import { josephinBold } from "../ui/fonts";
-import { ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import { BankerTransactionPayload, FreeParkingPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
 
 const RoomView = ({
   currentPlayer,
   otherPlayers,
   room,
-  loading,
   availableProperties,
   onTransfer,
   eventHistory,
@@ -34,8 +33,16 @@ const RoomView = ({
     },
   ) => void;
   loading: boolean;
-  onFreeParkingAction: (amount: string, type: string, playerId: string) => void;
-  onBankerTransaction: (amount: string, type: string, playerId: string) => void;
+  onFreeParkingAction: (
+    amount: string,
+    freeParkingType: FreeParkingPayload["freeParkingType"],
+    playerId: string,
+  ) => void;
+  onBankerTransaction: (
+    amount: string,
+    targetPlayerId: string,
+    transactionType: BankerTransactionPayload["transactionType"],
+  ) => void;
   availableProperties: Property[];
   onPurchaseProperty: (
     propertyId: string,
@@ -50,57 +57,63 @@ const RoomView = ({
   ) => void;
 }) => {
   const allPlayers = [...otherPlayers, currentPlayer];
-  console.log(
-    loading,
-    "loadign in /emoney-frontend/components/room/room.client.tsx",
-  );
   return (
     <div className="min-h-screen w-full relative flex flex-col">
-      <div className="sticky top-0 z-50 bg-white">
-        <div
-          className={`${josephinBold.className} select-none text-white absolute top-5 text-2xl right-1/2 transform translate-x-1/2`}
-        >
-          {room?.name || room?.roomCode}
+      {/* A real header box rather than a zero-height sticky wrapper holding two
+          absolutely positioned children -- the old one was `bg-white` on a black
+          page and only stayed invisible because nothing gave it height. */}
+      <header className="sticky top-0 z-50 bg-black">
+        <div className="relative flex h-16 items-center justify-center px-4">
+          <div
+            className={`${josephinBold.className} select-none text-white text-2xl`}
+          >
+            {room?.name || room?.code}
+          </div>
+          <Navbar
+            freeParking={room?.freeParking || 0}
+            player={currentPlayer}
+            eventHistory={eventHistory}
+            availableProperties={availableProperties}
+            onPurchaseProperty={onPurchaseProperty}
+            onFreeParkingAction={onFreeParkingAction}
+            roomCode={room?.code}
+            roomId={room?.id}
+          />
         </div>
-        <Navbar
-          freeParking={room?.freeParking || 0}
-          player={currentPlayer}
-          eventHistory={eventHistory}
-          availableProperties={availableProperties}
-          onPurchaseProperty={onPurchaseProperty}
-          onFreeParkingAction={onFreeParkingAction}
-          roomCode={room?.roomCode}
-          roomId={room?.id}
-        />
-      </div>
-      <div className="flex-1 flex items-center overflow-x-auo">
-        <div className="w-full overflow-x-auto snap-x snap-mandatory hide-scrollbar">
-          <div className="inline-flex gap-x-4 mx-4">
-            <div className="flex-none snap-center">
+      </header>
+      <div className="flex-1 flex items-center justify-center py-6">
+        {/* Below `lg` this stays the swipe strip the phone layout wants. At
+            `lg` it wraps into a centred grid instead: a mouse has no swipe,
+            and the strip was clipping the last player off the right edge with
+            `hide-scrollbar` removing the only clue that they existed. */}
+        <div
+          className="w-full flex gap-4 px-4 overflow-x-auto snap-x snap-mandatory hide-scrollbar
+            lg:mx-auto lg:max-w-[1160px] lg:flex-wrap lg:justify-center lg:gap-6 lg:overflow-x-visible lg:snap-none"
+        >
+          <div className="flex-none snap-center">
+            <PlayerCard
+              player={currentPlayer}
+              currentPlayer={currentPlayer}
+              onTransfer={onTransfer}
+              roomId={room?.id}
+              allPlayers={allPlayers}
+              onBankerTransaction={onBankerTransaction}
+              onManageProperties={onManageProperties}
+            />
+          </div>
+
+          {otherPlayers?.map((oPlayer) => (
+            <div key={oPlayer?.id} className="flex-none snap-center">
               <PlayerCard
-                player={currentPlayer}
+                player={oPlayer}
                 currentPlayer={currentPlayer}
                 onTransfer={onTransfer}
-                roomId={room?.id}
                 allPlayers={allPlayers}
+                roomId={room?.id}
                 onBankerTransaction={onBankerTransaction}
-                onManageProperties={onManageProperties}
               />
             </div>
-
-            {otherPlayers?.map((oPlayer) => (
-              <div key={oPlayer?.id} className="flex-none snap-center ">
-                <PlayerCard
-                  player={oPlayer}
-                  currentPlayer={currentPlayer}
-                  onTransfer={onTransfer}
-                  allPlayers={allPlayers}
-                  roomId={room?.id}
-                  onBankerTransaction={onBankerTransaction}
-                />
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
     </div>

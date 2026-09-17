@@ -93,6 +93,20 @@
   display: none;
 }
 
+/* A hidden scrollbar reads as "swipe me" on a touch screen. With a mouse it
+   just removes the only evidence that there is anything past the right edge,
+   so give the bar back to fine pointers. */
+@media (pointer: fine) {
+  .hide-scrollbar {
+    scrollbar-width: thin;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+}
+
 .drawer-content {
   height: 75vh;
   overflow-y: hidden;
