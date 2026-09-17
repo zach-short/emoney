@@ -344,6 +344,29 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	if err != nil {
 		return fmt.Errorf("invalid amount: %w", err)
 	}
+	if amount < 1 {
+		// strconv.Atoi happily parses "-50", and both arms below are built out
+		// of $inc pairs whose signs are fixed by the arm, not by the amount -
+		// so a negative amount runs the arm backwards while passing the arm's
+		// own floor. ADD of -50 clears `player.Balance < amount` (1500 < -50 is
+		// false) and then increments the balance by 50 and Free Parking by -50:
+		// a contribution that pays the contributor out of the pot. REMOVE of
+		// -1000 is worse, because it launders the balance floor entirely -
+		// `room.FreeParking < amount` is false for any pot, and the player is
+		// debited $1000 they do not have into a pot that gains it, with no
+		// insufficient-funds check anywhere on that arm.
+		//
+		// Rejected here rather than inside the transaction for the same reason
+		// the freeParkingType switch is hoisted: it is a fact about the
+		// payload, independent of any state, so it costs no round trip and
+		// stays reachable from a test. Same shape and same reasoning as
+		// handlePlaceBid's `amount < 1`.
+		//
+		// $0 is refused with the negatives: it moves nothing, but it still
+		// writes an event-history row and toasts the whole room about money
+		// that did not go anywhere.
+		return errors.New("a free parking amount has to be at least $1")
+	}
 
 	roomIdStr, ok := payload["roomId"].(string)
 	if !ok {
@@ -380,10 +403,8 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 		return fmt.Errorf("invalid free parking type: %s", actionType)
 	}
 
-	player, err := controllers.GetPlayer(playerObjID)
-	if err != nil {
-		return fmt.Errorf("failed to get player details: %w", err)
-	}
+	// --- the first database call. Nothing below here is reachable from a test
+	// on a machine with no Mongo; it panics on the nil config.DB instead. ---
 
 	var notification string
 
@@ -394,6 +415,39 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	defer session.EndSession(context.Background())
 
 	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+		// Reset every captured variable at the top, because WithTransaction
+		// re-runs this callback on a write conflict. Same discipline as
+		// handleCloseAuction, and for the same reason: a retry that inherits
+		// the previous attempt's values is deciding from state that was rolled
+		// back.
+		notification = ""
+
+		// The player is read HERE, inside the transaction and on ctx, rather
+		// than through controllers.GetPlayer above it - which is where this
+		// read used to be, on context.Background(), outside the session.
+		//
+		// The balance is the only thing the ADD arm's floor consults, so a read
+		// outside the transaction means a retry re-checks a value the retry was
+		// triggered by someone else changing. Concretely: balance $100, a
+		// $100 ADD and a concurrent $100 debit race; the debit commits, this
+		// callback loses the write conflict and is re-run, the stale $100 still
+		// clears `balance < amount`, and the player is driven to -$100. The
+		// floor is only a floor if the number it reads comes from the same
+		// snapshot as the write it guards.
+		//
+		// Filtered on _id alone, which is exactly what controllers.GetPlayer
+		// did - no roomId and no isActive. That is deliberate: this is an
+		// existing read moved into the transaction, not a new one, and adding
+		// either clause would silently change who may touch Free Parking.
+		// Whether a frozen player should be refused here is a real question and
+		// it is raised on the board, not folded into this fix (invariant 6,
+		// which requires every new read of Player to decide about isActive -
+		// this one decides to keep the read exactly as it was).
+		var player models.Player
+		if err := config.DB.Collection("Player").FindOne(ctx, bson.M{"_id": playerObjID}).Decode(&player); err != nil {
+			return nil, fmt.Errorf("failed to get player details: %w", err)
+		}
+
 		switch actionType {
 		case "ADD":
 			if player.Balance < amount {
@@ -419,7 +473,6 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 			}
 
 			notification = fmt.Sprintf("%s added $%d to Free Parking", player.Name, amount)
-			rm.CreateEventHistory(notification, roomObjID)
 		case "REMOVE":
 			var room models.Room
 			err := config.DB.Collection("Room").FindOne(ctx, bson.M{"_id": roomObjID}).Decode(&room)
@@ -450,7 +503,6 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 			}
 
 			notification = fmt.Sprintf("%s collected $%d from Free Parking", player.Name, amount)
-			rm.CreateEventHistory(notification, roomObjID)
 		default:
 			// Unreachable: actionType was validated above. Kept so this switch
 			// can never fall through to `return nil, nil` with no notification
@@ -465,6 +517,15 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	if err != nil {
 		return fmt.Errorf("transaction failed: %w", err)
 	}
+
+	// After the transaction, not inside it. Inside, it was called with
+	// context.Background() rather than the session's ctx, which meant it was
+	// never in the transaction that appeared to contain it - so a retried
+	// attempt inserted the row a second time, and an aborted attempt left a row
+	// claiming money moved when none did. handleKickPlayer and
+	// handleCloseAuction both call it out here; freeParking was the one that
+	// did not.
+	rm.CreateEventHistory(notification, roomObjID)
 
 	rm.Broadcast(client.Room, Message{
 		Type: "FREE_PARKING",

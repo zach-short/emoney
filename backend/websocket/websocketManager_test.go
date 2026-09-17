@@ -408,11 +408,17 @@ func TestBankTransactionReportsMalformedRoomIDAsATargetPlayerError(t *testing.T)
 
 // freeParkingOutcome is bankTransactionOutcome for the free parking handler,
 // and it exists for the same reason: config.DB is a nil *mongo.Database in a
-// test binary, so a freeParkingType the switch accepts panics inside
-// controllers.GetPlayer (controllers/playerControllers.go:154). That panic is
-// the only signal available here that a value was accepted rather than
-// rejected. If a seam is ever put in front of GetPlayer these tests stop
-// panicking; change the two accept tests to assert on the error at that point.
+// test binary, so a freeParkingType the switch accepts panics rather than
+// erroring. That panic is the only signal available here that a value was
+// accepted rather than rejected.
+//
+// The panic site moved when row 13 was fixed. It used to be inside
+// controllers.GetPlayer, which freeParking called above the session; the player
+// read now happens inside the transaction, so the first nil-config.DB
+// dereference on this path is config.DB.Client() at the StartSession call. The
+// signal is unchanged and so are the assertions - but if a seam is ever put in
+// front of either, these tests stop panicking, and the accept tests below
+// should assert on the error at that point instead.
 func freeParkingOutcome(t *testing.T, payload any) (err error, panicked bool) {
 	t.Helper()
 	defer func() {
@@ -528,6 +534,78 @@ func TestFreeParkingRejectsMalformedPlayerID(t *testing.T) {
 	err, _ := freeParkingOutcome(t, payload)
 
 	wantErrContains(t, err, "invalid player ID")
+}
+
+// --- freeParking's amount floor ---
+//
+// strconv.Atoi parses a leading minus, and both arms of the transaction are
+// built from $inc pairs whose signs belong to the arm rather than to the
+// amount. So before this floor existed, a negative amount ran the arm in
+// reverse and sailed past the arm's own insufficient-funds check, because that
+// check compares against the same negative number. These four are the whole
+// reason row 13's third bug needs no concurrency to reproduce: it is one frame.
+
+func TestFreeParkingRejectsNegativeAdd(t *testing.T) {
+	// The exploit as row 13 states it: ADD of -50 clears `player.Balance <
+	// amount` for any balance, then increments the balance by +50 and Free
+	// Parking by -50. A contribution that pays the contributor.
+	payload := validFreeParkingPayload()
+	payload["amount"] = "-50"
+	payload["freeParkingType"] = "ADD"
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a free parking amount has to be at least $1")
+}
+
+func TestFreeParkingRejectsNegativeRemove(t *testing.T) {
+	// The worse half, and the one the row's write-up does not spell out: the
+	// REMOVE arm has no balance check at all, so -1000 debits a player $1000
+	// they do not have and credits the pot with it. Money out of nothing.
+	payload := validFreeParkingPayload()
+	payload["amount"] = "-1000"
+	payload["freeParkingType"] = "REMOVE"
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a free parking amount has to be at least $1")
+}
+
+func TestFreeParkingRejectsZeroAmount(t *testing.T) {
+	// $0 moves no money, so it is not a money bug - it is a noise bug. It
+	// writes an event-history row and toasts every client in the room about a
+	// transfer that did not happen, which is the same class of thing board
+	// item 3's empty notification was.
+	payload := validFreeParkingPayload()
+	payload["amount"] = "0"
+
+	err, panicked := freeParkingOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a free parking amount has to be at least $1")
+}
+
+func TestFreeParkingChecksTheAmountBeforeTheFreeParkingType(t *testing.T) {
+	// A mutation check on placement, not on behaviour. The floor sits above the
+	// freeParkingType switch, which sits above the session - so a payload that
+	// is wrong in both ways reports the amount, and a floor moved down into the
+	// transaction would report the type instead. Moving it below the session
+	// start would panic on the nil config.DB and fail the two tests above.
+	payload := validFreeParkingPayload()
+	payload["amount"] = "-50"
+	payload["freeParkingType"] = "COLLECT"
+
+	err, _ := freeParkingOutcome(t, payload)
+
+	wantErrEqual(t, err, "a free parking amount has to be at least $1")
 }
 
 // --- wrong-typed payload fields ---
