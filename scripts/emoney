@@ -7,9 +7,12 @@
 #   emoney dev          run the dev server against the production API
 #   emoney health       is production actually serving?
 #
-# There is no CI in this repo — `.github/` does not exist, and the Vercel project is not
-# wired to the GitHub remote. Pushing publishes nothing. A deploy is a person running a
-# command, which is exactly why the command belongs here instead of in someone's memory.
+# There is no CI in this repo — `.github/` does not exist. The frontend is not the manual
+# half: the Vercel project IS connected to github.com/zach-short/emoney, so a push to main
+# builds it, and frontend/vercel.json's ignoreCommand cancels the build when the commit did
+# not touch frontend/ (verified 2026-09-16 from a deployment's own build log). `emoney deploy`
+# is for shipping without a push. The backend has no automation of any kind — `emoney api`
+# is the only way it moves, which is why merging is not shipping here.
 #
 # It lives in scripts/ rather than ~/.zshrc so it is version-controlled next to what it
 # calls: a command that grows a step grows it in the same commit as the step. The shell
@@ -41,11 +44,17 @@ COMMANDS=(
 )
 
 cmd_deploy() {
-  # frontend/ carries a .vercel link (project `emoney`), so the CLI needs no arguments.
+  # Deploy from the REPO ROOT, never from frontend/. Vercel applies the project's Root
+  # Directory (`frontend`) to whatever is uploaded, so uploading frontend/ makes it look for
+  # frontend/frontend and the deploy dies with `The specified Root Directory "frontend" does
+  # not exist.` — which is what this line did until 2026-09-16, two failed production deploys
+  # at 21:09 and 21:10 that night. There is a .vercel link in BOTH the root and frontend/, so
+  # the wrong directory fails late and confusingly instead of erroring as unlinked.
+  #
   # Vercel builds server-side and only promotes on success, so a broken commit cannot
   # take production down — it just fails the deploy and leaves the last good one serving.
   # That is the safety net standing in for the tests this repo does not have.
-  cd "$ROOT/frontend" && vercel --prod
+  cd "$ROOT" && vercel --prod
 }
 
 cmd_api() {
