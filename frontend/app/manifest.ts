@@ -14,16 +14,35 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/logo192.png",
         sizes: "192x192",
         type: "image/png",
+        purpose: "any",
       },
       {
         src: "/logo384.png",
         sizes: "384x384",
         type: "image/png",
+        purpose: "any",
       },
       {
         src: "/logo512.png",
         sizes: "512x512",
         type: "image/png",
+        purpose: "any",
+      },
+      // Android crops these to its own adaptive shape, so the mark is sized to
+      // fit the 80% safe circle and the black ground runs to every edge. They
+      // stay separate from the "any" set above: a single icon declared for both
+      // purposes has to use the padded artwork everywhere.
+      {
+        src: "/logo-maskable-192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "maskable",
+      },
+      {
+        src: "/logo-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
     ],
   };
