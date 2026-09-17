@@ -65,7 +65,7 @@ export default function DataState<T>({
     return <ErrorComponent error={error} onRetry={refetch} />;
   }
 
-  if (isEmpty(data)) {
+  if (data === null || isEmpty(data)) {
     return <EmptyComponent />;
   }
 

@@ -16,7 +16,7 @@ import { doesPlayerOwnFullSet } from "@/components/ui/helper-funcs";
 interface p {
   player: Player;
   currentPlayer: Player;
-  onManageProperties: (
+  onManageProperties?: (
     amount: number,
     managementType: ManagePropertiesPayload["managementType"],
     properties: { propertyId: string; count?: number }[],
@@ -87,6 +87,9 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
     const allPropertiesInGroup = groupedProperties.find(
       ([group]) => group === property.group
     );
+    if (!allPropertiesInGroup) {
+      return "Could not find the other properties in this group.";
+    }
     const group: [string, Property[]] = [
       allPropertiesInGroup[0],
       allPropertiesInGroup[1],
@@ -123,7 +126,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
     totalCost: number
   ) => {
     console.log(propertyCounts);
-    onManageProperties(totalCost, "HOUSES", propertyCounts, currentPlayer.id);
+    onManageProperties?.(totalCost, "HOUSES", propertyCounts, currentPlayer.id);
   };
 
   // const handleSellToBank = (property: Property) => {
@@ -136,7 +139,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
   // };
 
   const handleMortgage = (property: Property) => {
-    onManageProperties(
+    onManageProperties?.(
       -property.price / 2,
       "MORTGAGE",
       [{ propertyId: property.id }],
@@ -145,7 +148,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
   };
 
   const handleUnmortgage = (property: Property) => {
-    onManageProperties(
+    onManageProperties?.(
       property.price * 0.55,
       "UNMORTGAGE",
       [{ propertyId: property.id }],
@@ -181,7 +184,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
     };
 
     const totalCost =
-      Math.abs(currentHouses - initialHouses) * properties[0].houseCost;
+      Math.abs(currentHouses - initialHouses) * (properties[0].houseCost ?? 0);
     const transactionType =
       currentHouses > initialHouses
         ? "ADD_HOUSES"
@@ -363,7 +366,8 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
         <>
           {houseBuildingMode ? (
             renderManageHouseDialog(
-              groupedProperties.find(([group]) => group === selectedGroup)[1]
+              groupedProperties.find(([group]) => group === selectedGroup)?.[1] ??
+                []
             )
           ) : (
             <>
@@ -386,7 +390,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
                         property,
                         groupedProperties.find(
                           ([group]) => group === selectedGroup
-                        )[1]
+                        )?.[1] ?? []
                       )}
                     </div>
                   ))}

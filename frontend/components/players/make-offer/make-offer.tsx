@@ -58,8 +58,6 @@ const MakeOffer = ({
     value: Partial<OfferNoID[K]>
   ) => {
     setOffer((prev) => {
-      if (!prev) return null;
-
       const currentField = prev[key] || {};
       if (typeof currentField === "object" && !Array.isArray(currentField)) {
         return {
@@ -168,14 +166,14 @@ const MakeOffer = ({
                   onClick={() => setView("offer_properties")}
                   className={` border border-white p-3 rounded-md
                   ${
-                    offer?.offer?.properties.length === 0
+                    (offer?.offer?.properties?.length ?? 0) === 0
                       ? "border-white"
                       : `border-red-700`
                   }
                     p-3 rounded-md`}
                 >
-                  {offer.offer.properties.length > 0 &&
-                    offer.offer.properties.length}{" "}
+                  {(offer.offer.properties?.length ?? 0) > 0 &&
+                    offer.offer.properties?.length}{" "}
                   Properties
                 </button>
                 {/* <button
@@ -211,15 +209,15 @@ const MakeOffer = ({
                 <button
                   className={` 
                   ${
-                    offer?.request?.properties.length === 0
+                    (offer?.request?.properties?.length ?? 0) === 0
                       ? "border-white"
                       : `border-green-700`
                   }
                     border p-3 rounded-md`}
                   onClick={() => setView("request_properties")}
                 >
-                  {offer.request.properties.length > 0 &&
-                    offer.request.properties.length}{" "}
+                  {(offer.request.properties?.length ?? 0) > 0 &&
+                    offer.request.properties?.length}{" "}
                   Properties
                 </button>
                 {/* <button

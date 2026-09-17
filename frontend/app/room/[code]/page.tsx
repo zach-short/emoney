@@ -70,13 +70,15 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     targetPlayerId: string,
     transactionType: "BANKER_ADD" | "BANKER_REMOVE",
   ) => {
+    if (!player?.id || !room?.id) return;
+
     sendMessage(ws.current, "BANKER_TRANSACTION", {
       type: "BANKER_TRANSACTION",
       amount,
-      fromPlayerId: player?.id,
+      fromPlayerId: player.id,
       toPlayerId: targetPlayerId,
       transactionType,
-      roomId: room?.id,
+      roomId: room.id,
     });
   };
 
@@ -118,12 +120,14 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     freeParkingType: "ADD" | "REMOVE",
     playerId: string,
   ) => {
+    if (!room?.id) return;
+
     sendMessage(ws.current, "FREE_PARKING", {
       type: "FREE_PARKING",
       freeParkingType,
       amount,
       playerId,
-      roomId: room?.id,
+      roomId: room.id,
     });
   };
 
@@ -133,11 +137,13 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     properties: { propertyId: string; count?: number }[],
     playerId: string,
   ) => {
+    if (!room?.id) return;
+
     sendMessage(ws.current, "MANAGE_PROPERTIES", {
       managementType,
       playerId,
       properties,
-      roomId: room?.id,
+      roomId: room.id,
       amount,
     });
   };
@@ -247,21 +253,24 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
         refetchProperties();
       }}
     >
-      {() => (
-        <RoomView
-          room={room}
-          loading={isLoading}
-          currentPlayer={player}
-          otherPlayers={otherPlayers}
-          availableProperties={propertiesData?.availableProperties || []}
-          eventHistory={eventHistory}
-          onTransfer={handleTransfer}
-          onPurchaseProperty={handlePurchaseProperty}
-          onFreeParkingAction={handleFreeParkingAction}
-          onBankerTransaction={handleBankerTransaction}
-          onManageProperties={handleManageProperties}
-        />
-      )}
+      {() =>
+        room &&
+        player && (
+          <RoomView
+            room={room}
+            loading={isLoading}
+            currentPlayer={player}
+            otherPlayers={otherPlayers}
+            availableProperties={propertiesData?.availableProperties || []}
+            eventHistory={eventHistory}
+            onTransfer={handleTransfer}
+            onPurchaseProperty={handlePurchaseProperty}
+            onFreeParkingAction={handleFreeParkingAction}
+            onBankerTransaction={handleBankerTransaction}
+            onManageProperties={handleManageProperties}
+          />
+        )
+      }
     </DataState>
   );
 };

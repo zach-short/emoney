@@ -1,3 +1,4 @@
+import { FreeParkingPayload } from "@/types/payloads";
 import { useState } from "react";
 import { josephinBold, josephinNormal } from "../ui/fonts";
 import { Player } from "@/types/schema";
@@ -6,7 +7,11 @@ import Toast from "../ui/toasts";
 import { PiMoneyWavyThin, PiXThin } from "react-icons/pi";
 
 interface FreeParkingDialogProps {
-  onFreeParkingAction: (amount: string, type: string, playerId: string) => void;
+  onFreeParkingAction: (
+    amount: string,
+    freeParkingType: FreeParkingPayload["freeParkingType"],
+    playerId: string,
+  ) => void;
   player: Player;
   freeParking: number;
   onClick: () => void;

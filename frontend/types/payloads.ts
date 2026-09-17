@@ -40,7 +40,7 @@ export type ManagePropertiesPayload =
       amount: number;
     };
 
-interface BankerTransactionPayload {
+export interface BankerTransactionPayload {
   type: "BANKER_TRANSACTION";
   amount: string;
   fromPlayerId: string;
@@ -49,7 +49,7 @@ interface BankerTransactionPayload {
   roomId: string;
 }
 
-interface FreeParkingPayload {
+export interface FreeParkingPayload {
   type: "FREE_PARKING";
   freeParkingType: "ADD" | "REMOVE";
   amount: string;

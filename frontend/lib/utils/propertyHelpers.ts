@@ -39,7 +39,7 @@ const getCost = (property: Property, targetLevel: number): number => {
   const isUpgrade = levelDiff > 0;
   const costMultiplier = isUpgrade ? 1 : 0.5;
 
-  return property.houseCost * Math.abs(levelDiff) * costMultiplier;
+  return (property.houseCost ?? 0) * Math.abs(levelDiff) * costMultiplier;
 };
 
 const getDisplayText = (numberOfHouses: number): string => {

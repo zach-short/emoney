@@ -175,9 +175,8 @@ const playerTags: PlayerTag[] = [
     description: "Collector of premium properties in prestigious locations",
     howToEarn: "Own at least 3 properties with one property worth $350 or more",
     condition: (player) => {
-      const hasExpensiveProperties = player?.properties?.some(
-        (prop) => prop?.price >= 350
-      );
+      const hasExpensiveProperties =
+        player?.properties?.some((prop) => prop?.price >= 350) ?? false;
       const propertyCount = player?.properties?.length || 0;
 
       return hasExpensiveProperties && propertyCount >= 3;

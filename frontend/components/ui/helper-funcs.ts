@@ -122,7 +122,7 @@ const calculateRent = (
       rentMultiplier = 10;
     }
     console.log("rent multiplier", rentMultiplier);
-    finalAmount = roll * rentMultiplier;
+    finalAmount = (roll ?? 0) * rentMultiplier;
     rentreason = `rent on ${property.name} with ${properties[1].length} utilit${
       properties[1].length === 1 ? "y" : "ies"
     } & roll of ${roll}`;

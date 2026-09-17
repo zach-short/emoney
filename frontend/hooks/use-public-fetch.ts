@@ -17,7 +17,7 @@ export function usePublicFetch<T, P = any>(
 
   const applyResponse = useCallback((response: ApiResponse<T>) => {
     if (response.success) {
-      setData(response.data);
+      setData(response.data ?? null);
       setError(null);
     } else {
       setData(null);
@@ -117,11 +117,11 @@ export function usePublicAction<T, P extends any[]>(
       const response = await resourceFn(...params);
 
       if (response.success) {
-        setData(response.data);
-        if (onSuccess) {
+        setData(response.data ?? null);
+        if (onSuccess && response.data !== undefined) {
           await onSuccess(response.data);
         }
-        return response.data;
+        return response.data ?? null;
       } else {
         setError(response.error);
         if (onError) {
