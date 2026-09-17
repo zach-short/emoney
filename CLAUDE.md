@@ -54,8 +54,10 @@ machine.
   Gin 1.10.0, gorilla/websocket 1.5.3, mongo-driver 1.17.1, godotenv.
 - **Data** — MongoDB Atlas. The backend requires `DATABASE_URL` and `DATABASE_NAME` and calls
   `log.Fatal` without them (`backend/config/db.go:62-85`).
-- **No CI** (no `.github/`, 2026-09-16). **No tests** anywhere — see *Commands*. **No
-  migrations** (grepped 2026-09-16). **No auth** — see *Architecture*.
+- **No CI** (no `.github/`, 2026-09-16). **Go has tests as of 2026-09-16** (HANDOFF 4) — two
+  files, 26 cases, in `backend/websocket/` and `backend/manager/`; **the claim that there were
+  none anywhere, which stood here until 2026-09-16, is wrong.** The frontend still has no runner.
+  See *Commands*. **No migrations** (grepped 2026-09-16). **No auth** — see *Architecture*.
 
 ## Architecture
 
@@ -133,6 +135,10 @@ cd backend && go build ./... && go vet ./...
 cd backend && test -z "$(gofmt -l .)" && echo "gofmt clean"
 ```
 
+```bash
+cd backend && go test ./...
+```
+
 ### The gates that lie
 
 - **`bun run build` is green while producing the wrong artifact.** `frontend/lib/utils/api.ts:3`
@@ -143,10 +149,24 @@ cd backend && test -z "$(gofmt -l .)" && echo "gofmt clean"
   `console.log` at `frontend/lib/utils/api.ts:4` prints the chosen URL; a real 2026-09-16 run
   printed `http://localhost:8080 apiUrl` and exited 0. A local build proves the code compiles;
   it never proves the deployed bundle is right.
-- **`go test ./...` exits 0 having run nothing.** There are no `_test.go` files in the repo, so
-  it prints `[no test files]` for all ten packages and succeeds. There is no frontend test runner
-  at all (no test script and no runner dependency in `frontend/package.json`). **Nothing in this
-  repo is covered by a test** — a green gate run says the code compiles and lints, no more.
+- **`go test ./...` runs something now, but over two packages out of ten — CORRECTED
+  2026-09-16, HANDOFF 4.** The claim that stood here until then: there were no `_test.go` files
+  at all, so the command printed `[no test files]` for all ten packages and succeeded having run
+  nothing. As of HANDOFF 4 it reports `ok` for `manager` and `websocket` (26 cases) and
+  `[no test files]` for the other eight — `controllers`, where the money is actually written, is
+  one of the eight. **What the 26 cover is rejection only**: the branches of
+  `handleManageProperties`, `handleTransfer` and `ExtractPropertyDetails` that return an error
+  *before* any call into `controllers/` or `manager/`. **No test in this repo asserts that a
+  valid transaction moves the right money**, because that needs Mongo and there is none on this
+  machine. A green `go test` says bad input is refused; it says nothing about good input.
+  There is still no frontend test runner at all (no test script and no runner dependency in
+  `frontend/package.json`, 2026-09-16).
+- **`config.DB` is a nil `*mongo.Database` in a test binary**, so a test that reaches it panics
+  with a nil-pointer dereference rather than failing with an error — verified 2026-09-16 by
+  calling `handleBankTransaction`, which panics at `controllers/playerControllers.go:154` via
+  `websocket/websocketManager.go:327`. This is the boundary on what any test here can reach: if
+  a handler calls into Mongo before the branch you want to pin, that branch is untestable
+  without moving the call or extracting a seam.
 - **`gofmt -l .` exits 0 while listing unformatted files.** Use the `test -z` form above.
 - **`go build ./...` and `go vet ./...` pass over dead packages.** `backend/middleware/rateLimit.go`
   defines `RateLimitMiddleware` and nothing imports it — the only `middleware` hit in the Go tree
