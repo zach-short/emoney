@@ -122,7 +122,21 @@ func GetPlayerDetails(c *gin.Context) {
 
 	playerColl := config.DB.Collection("Player")
 	var player models.Player
-	err := playerColl.FindOne(c, bson.M{"_id": playerId}).Decode(&player)
+	// isActive is part of the filter, not a check on the decoded document, so a
+	// kicked player takes the existing not-found path rather than a new one.
+	// This is the second way back into a room: the websocket JOIN is one, and
+	// the Join screen is the other - components/room/join.tsx calls this
+	// endpoint with the id in localStorage and routes straight into the room if
+	// a player comes back. Without this clause a kicked player rejoins here
+	// while the websocket door is bolted.
+	//
+	// The 404 is deliberately the one that was already here. The Join screen
+	// answers it by sending them to the create-a-player form, where the name
+	// and colour they were using are now free (JoinRoom's collision count is
+	// scoped to active players). Telling them they were removed would be new
+	// player-facing copy, which PLAN.md's dial "where the kicked browser lands"
+	// deferred for v1.
+	err := playerColl.FindOne(c, bson.M{"_id": playerId, "isActive": true}).Decode(&player)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Player not found"})
 		return
