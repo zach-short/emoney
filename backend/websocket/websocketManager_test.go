@@ -1,6 +1,8 @@
 package websocket
 
 import (
+	"bytes"
+	"log"
 	"strings"
 	"testing"
 )
@@ -588,4 +590,215 @@ func TestPropertyPurchaseRejectsNonStringBuyerID(t *testing.T) {
 	err := purchaseErr(t, payload)
 
 	wantErrEqual(t, err, "invalid payload: expected string for buyerId")
+}
+
+// --- Broadcast: refuses a notification nobody wrote (board item 8) ---
+//
+// Broadcast is pure enough to test directly: with no clients registered for
+// the room, there is nothing to deliver to, so the only thing left to
+// observe is whether the guard's refusal fired. It logs on refusal
+// (log.Printf) and does nothing observable on success, so these tests
+// capture log output as the signal - the same shape of trick
+// bankTransactionOutcome/freeParkingOutcome use above, where a panic is the
+// only available signal that a value was accepted.
+
+// broadcastLogOutput runs Broadcast against a room with no registered
+// clients and returns whatever it wrote to the log during the call.
+func broadcastLogOutput(t *testing.T, message Message) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prevOutput := log.Writer()
+	prevFlags := log.Flags()
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(prevOutput)
+		log.SetFlags(prevFlags)
+	}()
+
+	NewRoomManager().Broadcast("ROOM1", message)
+
+	return buf.String()
+}
+
+func TestBroadcastRefusesEmptyNotification(t *testing.T) {
+	output := broadcastLogOutput(t, Message{
+		Type:    "FREE_PARKING",
+		Payload: map[string]interface{}{"notification": ""},
+	})
+
+	if !strings.Contains(output, "Broadcast refused") {
+		t.Fatalf("expected a refusal to be logged, got %q", output)
+	}
+}
+
+func TestBroadcastSendsNonEmptyNotification(t *testing.T) {
+	output := broadcastLogOutput(t, Message{
+		Type:    "FREE_PARKING",
+		Payload: map[string]interface{}{"notification": "Zach added $100 to Free Parking"},
+	})
+
+	if output != "" {
+		t.Fatalf("expected no refusal to be logged, got %q", output)
+	}
+}
+
+func TestBroadcastSendsPayloadWithNoNotificationKey(t *testing.T) {
+	// A payload that never promises a notification at all - a future message
+	// type that isn't a human-readable toast, say - is not this guard's
+	// concern; it must pass through unrefused.
+	output := broadcastLogOutput(t, Message{
+		Type:    "SOME_OTHER_EVENT",
+		Payload: map[string]interface{}{"playerId": "507f1f77bcf86cd799439012"},
+	})
+
+	if output != "" {
+		t.Fatalf("expected a payload with no notification key to pass through unrefused, got %q", output)
+	}
+}
+
+func TestBroadcastRefusesEmptyNotificationInStringMap(t *testing.T) {
+	// handler.go's PLAYER_LEFT builds its payload as map[string]string, not
+	// map[string]interface{} like every other broadcast site - the guard has
+	// to recognize this shape too, or it silently never applies to that site.
+	output := broadcastLogOutput(t, Message{
+		Type: "PLAYER_LEFT",
+		Payload: map[string]string{
+			"playerId":     "507f1f77bcf86cd799439012",
+			"notification": "",
+		},
+	})
+
+	if !strings.Contains(output, "Broadcast refused") {
+		t.Fatalf("expected a refusal to be logged, got %q", output)
+	}
+}
+
+func TestBroadcastSendsNonEmptyNotificationInStringMap(t *testing.T) {
+	output := broadcastLogOutput(t, Message{
+		Type: "PLAYER_LEFT",
+		Payload: map[string]string{
+			"playerId":     "507f1f77bcf86cd799439012",
+			"notification": "Zach has left the game",
+		},
+	})
+
+	if output != "" {
+		t.Fatalf("expected no refusal to be logged, got %q", output)
+	}
+}
+
+func TestBroadcastRefusesNonStringNotification(t *testing.T) {
+	// A "notification" key that isn't a string can't be shown as a toast
+	// either - the guard treats it the same as empty rather than trusting it.
+	output := broadcastLogOutput(t, Message{
+		Type:    "FREE_PARKING",
+		Payload: map[string]interface{}{"notification": 42},
+	})
+
+	if !strings.Contains(output, "Broadcast refused") {
+		t.Fatalf("expected a non-string notification to be refused, got %q", output)
+	}
+}
+
+func TestBroadcastDoesNotPanicOnNonMapPayload(t *testing.T) {
+	// The ERROR path writes a bare string payload directly with WriteJSON,
+	// never through Broadcast - but nothing stops a future caller from
+	// routing one here, and the guard's type switch must not panic on it.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Broadcast panicked on a non-map payload: %v", r)
+		}
+	}()
+
+	output := broadcastLogOutput(t, Message{Type: "ERROR", Payload: "not-a-map"})
+
+	if output != "" {
+		t.Fatalf("expected a non-map payload to pass through unrefused, got %q", output)
+	}
+}
+
+func TestBroadcastDoesNotPanicOnNilPayload(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Broadcast panicked on a nil payload: %v", r)
+		}
+	}()
+
+	broadcastLogOutput(t, Message{Type: "ERROR", Payload: nil})
+}
+
+// --- emptyNotification ---
+
+func TestEmptyNotification(t *testing.T) {
+	cases := []struct {
+		name         string
+		payload      interface{}
+		wantEmpty    bool
+		wantHasField bool
+	}{
+		{
+			name:         "map[string]interface{} with empty notification",
+			payload:      map[string]interface{}{"notification": ""},
+			wantEmpty:    true,
+			wantHasField: true,
+		},
+		{
+			name:         "map[string]interface{} with non-empty notification",
+			payload:      map[string]interface{}{"notification": "Zach sent $50 to Alex for rent"},
+			wantEmpty:    false,
+			wantHasField: true,
+		},
+		{
+			name:         "map[string]interface{} with no notification key",
+			payload:      map[string]interface{}{"playerId": "507f1f77bcf86cd799439012"},
+			wantEmpty:    false,
+			wantHasField: false,
+		},
+		{
+			name:         "map[string]interface{} with non-string notification",
+			payload:      map[string]interface{}{"notification": 42},
+			wantEmpty:    true,
+			wantHasField: true,
+		},
+		{
+			name:         "map[string]string with empty notification",
+			payload:      map[string]string{"notification": ""},
+			wantEmpty:    true,
+			wantHasField: true,
+		},
+		{
+			name:         "map[string]string with non-empty notification",
+			payload:      map[string]string{"notification": "Zach has left the game"},
+			wantEmpty:    false,
+			wantHasField: true,
+		},
+		{
+			name:         "map[string]string with no notification key",
+			payload:      map[string]string{"playerId": "507f1f77bcf86cd799439012"},
+			wantEmpty:    false,
+			wantHasField: false,
+		},
+		{
+			name:         "non-map payload",
+			payload:      "not-a-map",
+			wantEmpty:    false,
+			wantHasField: false,
+		},
+		{
+			name:         "nil payload",
+			payload:      nil,
+			wantEmpty:    false,
+			wantHasField: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			empty, hasField := emptyNotification(tc.payload)
+			if empty != tc.wantEmpty || hasField != tc.wantHasField {
+				t.Fatalf("emptyNotification(%#v) = (%v, %v), want (%v, %v)", tc.payload, empty, hasField, tc.wantEmpty, tc.wantHasField)
+			}
+		})
+	}
 }
