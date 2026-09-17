@@ -54,13 +54,30 @@ func HandleWebSocket(c *gin.Context) {
 	defer func() {
 		Manager.RemoveClient(client)
 		conn.Close()
-		Manager.Broadcast(roomCode, Message{
-			Type: "PLAYER_LEFT",
-			Payload: map[string]string{
-				"playerId":     client.PlayerID,
-				"notification": fmt.Sprintf("%s has left the game", client.PlayerName),
-			},
-		})
+
+		// Every conn carries PlayerID "" from the upgrade until its JOIN
+		// succeeds (SeatClient's comment in websocketManager.go), and this
+		// goroutine is the only writer to its own client.PlayerID, so
+		// reading it unlocked here is the same safe case SeatClient itself
+		// documents - not a race. The guard exists because an unseated conn
+		// has no name to put in the sentence below: without it, PLAYER_LEFT
+		// goes out with notification " has left the game", a leading space
+		// and no subject. Broadcast's own empty-notification guard
+		// (emptyNotification, websocketManager.go) does not catch this -
+		// the string itself is not empty, only the name inside it is. A
+		// kicked player's refused reconnect (the !player.IsActive check in
+		// the JOIN case below) is what makes this the common path rather
+		// than a rare one: their browser reconnects, JOIN is refused, and
+		// the conn closes with PlayerID still "".
+		if client.PlayerID != "" {
+			Manager.Broadcast(roomCode, Message{
+				Type: "PLAYER_LEFT",
+				Payload: map[string]string{
+					"playerId":     client.PlayerID,
+					"notification": fmt.Sprintf("%s has left the game", client.PlayerName),
+				},
+			})
+		}
 	}()
 	for {
 		var message Message
