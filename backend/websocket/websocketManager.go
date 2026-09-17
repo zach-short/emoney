@@ -50,7 +50,33 @@ func (rm *RoomManager) RemoveClient(client *Client) {
 	}
 }
 
+// Broadcast is the single fan-out point for every room message. It refuses to
+// send a message whose "notification" field is present but empty (or present
+// and not a string). Every websocket money handler in this package builds a
+// human-readable notification string as its last step before calling
+// Broadcast; board item 3 is what happens when a handler's own branching
+// forgets to fill that string in - the FREE_PARKING message went out with
+// notification "" for money that never moved, and every client in the room
+// toasted blank text. That specific hole is closed in freeParking, but
+// nothing stopped the next handler from reproducing it, because nothing
+// checked the string ever got written. This is that check, at the one place
+// every broadcast already passes through.
+//
+// A payload that never promises a notification at all - it has no
+// "notification" key - is a different contract and is not this guard's
+// concern; it is broadcast unchanged. Refusal is silent to the room (a
+// dropped broadcast never reaches the frontend's ERROR toast - there is no
+// path from here to there) and loud in the server log, on the theory that
+// this case should not occur in practice - freeParking's own validation
+// already prevents it - so the only audience for a rejection is whoever
+// reads the backend log looking for why a handler's next-handler-copy of the
+// same mistake produced silence instead of a bad toast.
 func (rm *RoomManager) Broadcast(room string, message Message) {
+	if empty, hasField := emptyNotification(message.Payload); hasField && empty {
+		log.Printf("Broadcast refused for room %s: %s payload has an empty or non-string notification", room, message.Type)
+		return
+	}
+
 	rm.mu.RLock()
 	defer rm.mu.RUnlock()
 	if clients, ok := rm.clients[room]; ok {
@@ -61,6 +87,35 @@ func (rm *RoomManager) Broadcast(room string, message Message) {
 				delete(clients, client)
 			}
 		}
+	}
+}
+
+// emptyNotification reports whether payload carries a "notification" field
+// and, if so, whether that field is empty (hasField distinguishes "no such
+// key" from "key present with a zero value"). It recognizes the two payload
+// shapes the broadcast sites in this package actually build -
+// map[string]interface{} (every websocketManager.go handler and
+// PLAYER_JOINED) and map[string]string (PLAYER_LEFT) - and treats any other
+// payload shape, including a bare string like the ones the ERROR path writes
+// directly with WriteJSON rather than through Broadcast, as not having the
+// field at all: nothing to refuse.
+func emptyNotification(payload interface{}) (empty bool, hasField bool) {
+	switch p := payload.(type) {
+	case map[string]interface{}:
+		raw, ok := p["notification"]
+		if !ok {
+			return false, false
+		}
+		text, isString := raw.(string)
+		return !isString || text == "", true
+	case map[string]string:
+		text, ok := p["notification"]
+		if !ok {
+			return false, false
+		}
+		return text == "", true
+	default:
+		return false, false
 	}
 }
 
