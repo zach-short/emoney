@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { josephinBold } from "@/components/ui/fonts";
 import { sendMessage } from "@/lib/utils/sendWsMessage";
 import { KickPlayerPayload, ManagePropertiesPayload } from "@/types/payloads";
+import { BidPlaced } from "@/types/events";
+import { LiveBid } from "@/components/room/auction-bar";
 import { usePublicFetch } from "@/hooks/use-public-fetch";
 import { roomApi } from "@/lib/utils/api.service";
 import DataState from "@/components/containers/data-state";
@@ -21,12 +23,23 @@ interface WebSocketMessage {
   payload: { notification?: string } | string;
 }
 
+// `types/events.ts` declares each inbound event flattened -- the event name
+// beside the payload's own fields -- so the payload alone is that shape without
+// its `type`. Narrowing to it is a cast either way: nothing validates a frame
+// against these declarations, on this side or the Go one.
+type BidPlacedPayload = Omit<BidPlaced, "type">;
+
 const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
   const { code } = use(params);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
   const storedPlayerId = playerStore.getPlayerIdForRoom(code);
+
+  // The last bid applied without a refetch. See `LiveBid` and the BID_PLACED
+  // branch below: bids are the one broadcast this page does not refetch on, so
+  // the payload itself is what keeps the panel current between lots.
+  const [liveBid, setLiveBid] = useState<LiveBid | null>(null);
 
   const {
     data: playersData,
@@ -103,6 +116,37 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     });
   };
 
+  // A raise on the open lot. `propertyId` comes from the panel, which is
+  // rendering the auction the last room fetch returned, so a bid from a screen
+  // that is behind names the lot that screen is showing and is refused by the
+  // server rather than landing on whatever happens to be open now.
+  const handlePlaceBid = (propertyId: string, amount: number) => {
+    if (!player?.id || !room?.id) return;
+
+    sendMessage(ws.current, "PLACE_BID", {
+      type: "PLACE_BID",
+      roomId: room.id,
+      propertyId,
+      bidderId: player.id,
+      amount,
+    });
+  };
+
+  // The Banker's hammer. Both ids identify the lot and both are required: a
+  // deed alone does not identify an auction lot, because the same deed can be
+  // the open lot of two different auctions.
+  const handleCloseAuction = (propertyId: string, kickedPlayerId: string) => {
+    if (!player?.id || !room?.id) return;
+
+    sendMessage(ws.current, "CLOSE_AUCTION", {
+      type: "CLOSE_AUCTION",
+      roomId: room.id,
+      playerId: player.id,
+      propertyId,
+      kickedPlayerId,
+    });
+  };
+
   const handlePurchaseProperty = (
     propertyId: string,
     buyerId: string,
@@ -137,6 +181,39 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
         return;
       }
 
+      // A bid is the only message here that is neither rare nor money-moving,
+      // and it is the only one that leaves before the toast and the refetch.
+      //
+      // Both suppressions are the same decision (PLAN.md section 3, "Toast per
+      // bid"): a lot can take twenty bids, every one of them reaches every
+      // client, and the default path below would answer each with a toast and a
+      // room-wide refetch from every device. Nothing moves on a bid except the
+      // high bid itself, and the payload carries all of it.
+      if (message.type === "BID_PLACED") {
+        const bid = message.payload as BidPlacedPayload;
+
+        if (room?.auction && bid?.propertyId === room.auction.propertyId) {
+          setLiveBid({
+            // Captured from the auction the bid was accepted against, not from
+            // the payload, which does not carry it. See `LiveBid`.
+            kickedPlayerId: room.auction.kickedPlayerId,
+            propertyId: bid.propertyId,
+            bidderId: bid.bidderId,
+            amount: bid.amount,
+          });
+          return;
+        }
+
+        // A bid on a lot this client does not have open: either the room has
+        // no auction here at all, or it has an older one. Both mean a broadcast
+        // was missed, and the only transport that can repair it is the fetch --
+        // so this one bid does pay for a refetch. It cannot loop: the refetch
+        // brings the lot the bids are on, and every later bid takes the branch
+        // above.
+        refetchPlayers();
+        return;
+      }
+
       toast.success(text, {
         duration: 4000,
         icon: getIconForType(message.type),
@@ -152,10 +229,21 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
       // deeds do not appear in Bank's Properties until some later property
       // event happens to fire. A `FREEZE` kick writes no property, so this is
       // one wasted fetch on that arm; the message does not say which arm ran.
+      //
+      // `AUCTION_LOT_CLOSED` belongs here for the same reason: three of its
+      // four outcomes clear the lot's `playerId`, which is exactly what
+      // `GetAvailableProperties` filters on, and the fourth hands the deed to
+      // the winner. Either way a deed changed hands and the for-sale list is
+      // stale. `AUCTION_STARTED` is deliberately absent -- opening an auction
+      // writes no property at all, and the kick that opened it already fired
+      // this on `PLAYER_KICKED` one message earlier.
       if (
-        ["PURCHASE_PROPERTY", "MANAGE_PROPERTIES", "PLAYER_KICKED"].includes(
-          message.type,
-        )
+        [
+          "PURCHASE_PROPERTY",
+          "MANAGE_PROPERTIES",
+          "PLAYER_KICKED",
+          "AUCTION_LOT_CLOSED",
+        ].includes(message.type)
       ) {
         refetchProperties();
       }
@@ -316,6 +404,9 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
             onBankerTransaction={handleBankerTransaction}
             onManageProperties={handleManageProperties}
             onKickPlayer={handleKickPlayer}
+            liveBid={liveBid}
+            onPlaceBid={handlePlaceBid}
+            onCloseAuction={handleCloseAuction}
           />
         )
       }

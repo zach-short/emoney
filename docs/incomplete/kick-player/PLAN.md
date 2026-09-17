@@ -1,9 +1,11 @@
 <!-- personal-config v0.2.1 · 2026-09-16 · config 1e21aa31 · standard v1.0.3 -->
 # PLAN — kick a player
 
-**Status: IN FLIGHT — PHASE 1 BUILT AND MERGED 2026-09-17 (HANDOFF 15 + 19, `ed87ac8` /
-`a1d7b49`); PHASE 2 BUILT 2026-09-17 (HANDOFF 20), UNCOMMITTED; PHASE 3 BUILT 2026-09-17,
-UNCOMMITTED; PHASES 4–5 NOT STARTED.**
+**Status: IN FLIGHT — PHASES 1-4 BUILT. AMENDED 2026-09-17 (HANDOFF 35): Phase 2 and Phase 3
+are committed and on `main` (Phase 3 as `6a614a3`, deployed in HANDOFF 22); PHASE 4 IS BUILT AND
+UNCOMMITTED in worktree `.claude/worktrees/kick-phase4`; PHASE 5 NOT STARTED.** The line this
+header carried until then — "PHASE 2 BUILT, UNCOMMITTED; PHASE 3 BUILT, UNCOMMITTED; PHASES 4-5
+NOT STARTED" — is spent. **What is left is Phase 5: the commit, the push, and the walk.**
 **No phase has had its device walk, and the backend deploy is owed.**
 §5 hazard 1's trigger fired; that blocker is closed and the paragraph is kept only as the record
 of why the wait was right. **Phase 2 is the next one and is unblocked** — it consumes Phase 1's
@@ -544,7 +546,93 @@ to be correct about.
 
 ### Phase 4 — Auction UI, frontend
 
-**Status: NOT STARTED. Waits on Phase 3.**
+**Status: BUILT 2026-09-17 — HANDOFF 35. UNCOMMITTED**, in worktree
+`.claude/worktrees/kick-phase4` (branch `worktree-kick-phase4`, cut from `f999188` and
+fast-forwarded onto `main` at `dafd16d`, which is backend-only and shares no file with this
+diff). Eight files, six modified and two new, 241 insertions. Frontend gates green in that
+worktree: `tsc --noEmit` 0, `bun run lint` 0 (76 files, 0 errors, 0 warnings — two more files
+than before, which is exactly the two new components), `bun run build` 0 with 10 routes.
+**Its three-device walk is owed**, and so is one wire check no gate here can make; see *As
+built* below.
+
+**As built.** `frontend/types/schema.ts` (the `Auction` type, `Room.auction`),
+`frontend/types/events.ts` (`AuctionStarted`, `BidPlaced`, `AuctionLotClosed`),
+`frontend/types/payloads.ts` (`PlaceBidPayload`, `CloseAuctionPayload`, both added to the
+`WebSocketPayload` union), `frontend/lib/utils/sendWsMessage.ts` (the two new type literals, in
+both unions), `frontend/app/room/[code]/page.tsx` (the two senders, the `BID_PLACED` branch,
+`AUCTION_LOT_CLOSED` added to `refetchProperties`), `frontend/components/room/room.client.tsx`
+(the bar, inside the sticky header), and two new files —
+`frontend/components/room/auction-bar.tsx` (the strip, the drawer, and the id → deed resolution)
+and `frontend/components/room/auction-panel.tsx` (the lot, the bid control, the hammer).
+Phase 3 already landed the `AUCTION` option in the disposition picker, so BD-6 needed nothing
+here.
+
+**Both jobs Phase 3 named were done:** `AUCTION_LOT_CLOSED` is in `page.tsx`'s
+`refetchProperties` list, and `schema.ts` carries the `auction` field.
+
+**Four decisions the scope did not name.** Each is reversible and each is recorded because a
+later reader should not have to guess whether it was considered.
+
+1. **The panel does not say "deed 2 of 4", and cannot.** The scope asks for the position in the
+   queue. The total is only ever stated in `AUCTION_STARTED`'s `lotCount`, which is a transient
+   broadcast; `models.Auction` carries the remaining queue and nothing else, so a client that
+   reloads mid-auction has no way back to it — and a reload mid-auction is this phase's own
+   *watch for*. A count derived from `1 + queue.length` is right for the first lot and wrong for
+   every one after it. The panel names the deeds still to come instead ("Still to come: Park
+   Place · Boardwalk", or "Nothing — this is the last lot"), which is reload-safe and answers
+   the question the scope gives as its reason: *a player needs to know what is still coming*.
+   **Reversal:** add a lot number to `models.Auction`; it is a backend change, a redeploy, and
+   `websocketManager.go` again, so it was raised rather than folded (`PASSOFF.md` row 27).
+2. **The bid control refuses an unaffordable bid on the client**, rather than sending it and
+   rendering the server's red `ERROR` toast. The three rules mirror `bidRejection`'s in its own
+   order. `free-parking.tsx` is the precedent — it pre-checks insufficient funds before sending.
+   **Consequence for the walk:** Phase 3's done-when (c) expects a red toast for a bid above the
+   bidder's balance, and through this UI that bid can no longer be sent. The server path is
+   still reachable and still worth walking: bid the whole balance, pay rent, then hammer (D17's
+   *second* check), or let two bidders race. **Reversal:** delete the third clause of `refusal`.
+3. **The Banker's close is one tap plus an inline Confirm**, matching the dial that made the
+   kick itself a confirmed action and `player-card-content.tsx`'s banker writes. The confirm is
+   held against the high bid it was opened on, not a boolean, so a bid landing while it is open
+   closes it and the Banker taps again against the new number — there is no window in which
+   Confirm means something other than the sentence above it. **Reversal:** call `closeLot`
+   straight from the button.
+4. **The sheet does not open itself when an auction starts.** `AUCTION_STARTED` already toasts,
+   and a sheet thrown over someone mid-transfer is a worse interruption than a bar they can see.
+   **Reversal:** one effect on `room.auction` appearing.
+
+**How the no-toast, no-refetch bid works, since it is the one non-obvious thing here.**
+`BID_PLACED` leaves `handleWebSocketNotification` before both the toast and `refetchPlayers`
+(§3's dial). The panel stays current because the payload carries the whole of the new high bid
+and is applied as an overlay, taken as the **larger** of the overlay and the room's stored
+`highBid` — monotone within a lot, so a refetch landing between a broadcast and its write cannot
+walk the number backwards, and an overlay from a closed lot is ignored rather than cleaned up.
+The overlay is keyed on `(kickedPlayerId, propertyId)`, captured from the auction the bid was
+accepted against rather than from the payload, which does not carry the kicked player: the same
+deed can be the open lot of two different auctions, and a stale high bid from the first would
+otherwise sit on top of the second's $0 opening. **The phase's *watch for* is answered
+explicitly**: a `BID_PLACED` naming a lot this client does not have open is the one bid that
+does pay for a `refetchPlayers`, because it means a broadcast was missed and the fetch is the
+only transport that can repair it. It cannot loop — the refetch brings the lot the bids are on.
+
+**Verified in a browser at 375px, and what that does and does not prove.** The deployed
+backend's CORS and websocket origin allowlist name `http://localhost:3000` literally
+(`backend/main.go:22-26`, `websocket/handler.go:18`) and port 3000 on this machine was held by an
+unrelated project, so the run was driven against a **throwaway local stub** of the five endpoints
+this screen touches, not against `api.emoney.club`. **What it proves:** every branch of the panel
+renders and every interaction fires — a bid raises the high bid with no toast and, confirmed
+against the network log, **no refetch**; the field follows the minimum and stops on a keystroke;
+all three refusals disable the button with their sentence; the Banker's button reads "Sold to
+Carol for $4" and "No bids — return it to the Bank" as the state changes; the confirm settles and
+advances the lot in `PropertyIndex` order (Oriental 6 → Park Place 37 → Boardwalk 39); the
+"bidding on the deed alone" note appears on the developed, mortgaged lot; closing the last lot
+ends the auction and the bar and sheet disappear together; a full reload mid-auction shows the
+live high bid (D18's whole justification); the kicked player is told "This is your estate. You
+can't bid on it."; a non-Banker is told the Banker closes each lot; and a `BID_PLACED` for an
+unknown lot recovers by refetching. **What it does not prove:** that the real Go handlers accept
+these two payloads. **Nothing in this repo has checked that the frontend's `PLACE_BID` /
+`CLOSE_AUCTION` payload keys match the server's**, in either direction — that is `CLAUDE.md`'s
+standing warning about this contract, and it is the first thing the device walk will find if a
+key is wrong.
 
 **Scope.** The bidding panel (a `Drawer`, following the house pattern); the bid control, opening
 at $0 with $1 raises (D15); the live high bid and bidder, and the position in the queue — *deed 2

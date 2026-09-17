@@ -9,6 +9,41 @@ export type Room = {
   createdAt: Date;
   isActive: boolean;
   freeParking: number;
+  // Present only while an auction is running: Go tags it
+  // `json:"auction,omitempty"` on a pointer field
+  // (backend/models/roomModel.go), so a room with no auction carries no key at
+  // all rather than a null. Optional here for exactly that reason -- `room`
+  // comes back whole from `GET /rooms/:code/players`, which is why the live
+  // auction needs no REST route of its own (D18).
+  auction?: Auction;
+};
+
+// One live auction of one kicked player's estate, mirroring
+// `backend/models/auctionModel.go`. Read-only on this side: the client never
+// writes it, it only renders what the last room fetch returned and raises
+// PLACE_BID / CLOSE_AUCTION against it.
+//
+// A room carries at most one. Exactly one deed is open at a time, in board
+// order, and the Banker advances it by hand (D14, D16).
+export type Auction = {
+  // Whose estate is being sold. The removed player may not bid on it, and it
+  // is half of the (kickedPlayerId, propertyId) pair that identifies an
+  // auction lot -- a deed alone does not, because the same deed can be the
+  // open lot of two different auctions.
+  kickedPlayerId: string;
+  // The open lot: the one deed bids are being taken on.
+  propertyId: string;
+  // The deeds still to come, in board order, NOT including the open lot. Empty
+  // means this is the last one. These deeds still belong to the kicked player
+  // until each lot closes, so their names resolve out of that player's
+  // `properties` -- nothing here needs a second fetch.
+  queue: string[];
+  // Whole dollars. A lot opens at 0 and the minimum raise is 1 (D15), so "beats
+  // the high bid" and "is at least a dollar more" are the same comparison.
+  highBid: number;
+  // null until somebody bids. Go writes the key unconditionally (no
+  // `omitempty`), so this is null rather than absent.
+  highBidderId: string | null;
 };
 
 export type Player = {
