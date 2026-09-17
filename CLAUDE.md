@@ -24,9 +24,11 @@
 - **Read `gofmt`'s output, not its exit code.** `gofmt -l .` exits 0 whether or not it lists
   files. As of 2026-09-16 it lists `backend/models/roomModel.go`. The gate is
   `test -z "$(gofmt -l .)"`.
-- **A green local `bun run build` can still be wrong.** See *Commands* below — it bakes
-  `localhost:8080` into the bundle when the API env vars are unset, which is the normal local
-  state.
+- **A green local `bun run build` can still be wrong, and it no longer says so.** See *Commands*
+  below — it bakes `localhost:8080` into the bundle when the API env vars are unset, which is the
+  normal local state. There used to be a `console.log` in the build output that named the chosen
+  URL; it is gone, so nothing in a green build distinguishes a correct bundle from a localhost
+  one.
 - **The websocket contract is typed on the frontend only.** Go sends
   `Message{Type string, Payload interface{}}` (`backend/websocket/types.go:12-15`) and builds every
   payload as an inline `map[string]interface{}` at the send site; the event names are bare string
@@ -141,14 +143,20 @@ cd backend && go test ./...
 
 ### The gates that lie
 
-- **`bun run build` is green while producing the wrong artifact.** `frontend/lib/utils/api.ts:3`
-  and `frontend/lib/utils/wsHelpers.ts:5` fall back to `localhost:8080` when
-  `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_API_URL_NO_PREFIX` are unset. Those live only on Vercel;
-  `frontend/.env.local` holds a `VERCEL_OIDC_TOKEN` and nothing else. The values are inlined at
-  build time, so a local build bakes in localhost. **The tell is in the build output** — a
-  `console.log` at `frontend/lib/utils/api.ts:4` prints the chosen URL; a real 2026-09-16 run
-  printed `http://localhost:8080 apiUrl` and exited 0. A local build proves the code compiles;
-  it never proves the deployed bundle is right.
+- **`bun run build` is green while producing the wrong artifact, and there is no tell —
+  CORRECTED 2026-09-16, HANDOFF 9.** `frontend/lib/utils/api.ts:3` and
+  `frontend/lib/utils/wsHelpers.ts:6` fall back to `localhost:8080` when `NEXT_PUBLIC_API_URL` /
+  `NEXT_PUBLIC_API_URL_NO_PREFIX` are unset. Those live only on Vercel; `frontend/.env.local`
+  holds a `VERCEL_OIDC_TOKEN` and nothing else. The values are inlined at build time, so a local
+  build bakes in localhost. **The claim that stood here until 2026-09-16 — that the tell is a
+  `console.log` at `api.ts:4` printing the chosen URL — is wrong: that line no longer exists.**
+  It was removed in `bec2350`; `api.ts` is now ten lines with no logging, and a captured build
+  log of the merged tree contains no `apiUrl` line and no `localhost:8080` line at all (grepped
+  2026-09-16). **The hazard is unchanged and the signal is gone.** A local build proves the code
+  compiles; nothing in its output tells you which API the bundle points at. To check that, read
+  `api.ts:3` against the environment you built in, or check the deployed site rather than the
+  build — `scripts/emoney dev` passes both variables explicitly and is the way to run locally
+  against the real API.
 - **`go test ./...` runs something now, but over two packages out of ten — CORRECTED
   2026-09-16, HANDOFF 4.** The claim that stood here until then: there were no `_test.go` files
   at all, so the command printed `[no test files]` for all ten packages and succeeded having run
@@ -195,8 +203,9 @@ which `frontend/tsconfig.json` names under `include` but does not actually need.
 
 - Never run a second backend instance, or put the backend behind an autoscaler — it splits rooms
   silently (`backend/websocket/websocketManager.go:23`).
-- Never trust a local `bun run build` as evidence the deployed frontend is right; check the
-  `apiUrl` line in the build output.
+- Never trust a local `bun run build` as evidence the deployed frontend is right. There is no
+  longer an `apiUrl` line in the build output to check — see *The gates that lie*; verify against
+  the deployed site, or run locally through `scripts/emoney dev`, which passes both API variables.
 - Never reintroduce `next-pwa` or `@serwist/next`. Both register a webpack config, which fails
   `next build` now that Turbopack is the default. Installability rests on `frontend/app/manifest.ts`
   alone; Chrome no longer requires a service worker.
