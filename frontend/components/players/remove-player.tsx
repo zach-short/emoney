@@ -136,7 +136,7 @@ const RemovePlayer = ({
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
-          className={`sm:max-w-[425px] ${josephinBold.className} text-black top-1/3`}
+          className={`sm:max-w-[425px] ${josephinBold.className} text-black max-h-[85vh] overflow-y-auto`}
         >
           <DialogHeader>
             <DialogTitle>{copy.title}</DialogTitle>
