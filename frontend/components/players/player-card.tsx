@@ -2,7 +2,7 @@
 import { Player } from "@/types/schema";
 import { josephinBold } from "../ui/fonts";
 import { PlayerDetails } from "./player-card-content";
-import { BankerTransactionPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import { BankerTransactionPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
 import {
   Drawer,
   DrawerContent,
@@ -19,6 +19,7 @@ const PlayerCard = ({
   roomId,
   onBankerTransaction,
   onManageProperties,
+  onKickPlayer,
 }: {
   player: Player;
   currentPlayer: Player;
@@ -44,6 +45,11 @@ const PlayerCard = ({
     managementType: ManagePropertiesPayload["managementType"],
     properties: { propertyId: string; count?: number }[],
     playerId: string
+  ) => void;
+  onKickPlayer: (
+    targetPlayerId: string,
+    disposition: KickPlayerPayload["disposition"],
+    successorPlayerId?: string
   ) => void;
 }) => {
   const color = player?.color || "#fff";
@@ -80,6 +86,7 @@ const PlayerCard = ({
               onTransfer={onTransfer}
               onManageProperties={onManageProperties}
               onBankerTransaction={onBankerTransaction}
+              onKickPlayer={onKickPlayer}
               allPlayers={allPlayers}
               roomId={roomId}
             />

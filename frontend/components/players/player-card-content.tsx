@@ -11,11 +11,12 @@ import PayRequestRent from "./pay.req.rent.component";
 import { josephinBold, josephinNormal } from "../ui/fonts";
 import PlayerTags from "./player-tags";
 import ManageProperties from "./manage-properties";
-import { BankerTransactionPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import { BankerTransactionPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { CiCircleMinus, CiCirclePlus } from "react-icons/ci";
+import RemovePlayer from "./remove-player";
 
 const PlayerDetails = ({
   player,
@@ -25,6 +26,7 @@ const PlayerDetails = ({
   roomId,
   onManageProperties,
   onBankerTransaction,
+  onKickPlayer,
 }: {
   player: Player;
   allPlayers: Player[];
@@ -50,6 +52,11 @@ const PlayerDetails = ({
     amount: string,
     playerId: string,
     transactionType: BankerTransactionPayload["transactionType"]
+  ) => void;
+  onKickPlayer: (
+    targetPlayerId: string,
+    disposition: KickPlayerPayload["disposition"],
+    successorPlayerId?: string
   ) => void;
 }) => {
   const [transferType, setTransferType] = useState<"SEND" | "REQUEST">("SEND");
@@ -83,6 +90,14 @@ const PlayerDetails = ({
     }
     return player?.properties;
   };
+
+  // A kicked player is marked, not deleted: `GetPlayersInRoom` still returns
+  // them, deliberately, so that a FREEZE kick's deeds keep resolving to a name
+  // (D4, D11). That makes this component the only thing in the app that can
+  // tell the room they are gone -- without it a kick renders as nothing
+  // happening at all. Compared against `false` rather than negated so that a
+  // payload missing the field never renders a live player as removed.
+  const isRemoved = player?.isActive === false;
 
   const [dialogState, setDialogState] = useState<"add" | "remove" | null>(null);
   const [amount, setAmount] = useState("");
@@ -137,14 +152,14 @@ const PlayerDetails = ({
           className={`${josephinBold.className} w-full absolute top-[6.5rem] right-1/2 transform translate-x-1/2`}
         >
           <div className={`flex items-center justify-center space-x-5 w-full`}>
-            {currentPlayer?.isBanker && (
+            {currentPlayer?.isBanker && !isRemoved && (
               <CiCircleMinus
                 onClick={() => setDialogState("remove")}
                 className={`hover:cursor-pointer pb-1`}
               />
             )}
             <p> ${player?.balance || 0}</p>{" "}
-            {currentPlayer?.isBanker && (
+            {currentPlayer?.isBanker && !isRemoved && (
               <CiCirclePlus
                 onClick={() => setDialogState("add")}
                 className={`hover:cursor-pointer pb-1`}
@@ -179,7 +194,22 @@ const PlayerDetails = ({
           player={player}
           allPlayers={allPlayers.filter((p) => p?.id !== player?.id)}
         />
-        {currentPlayer?.id !== player?.id && (
+        {currentPlayer?.isBanker && !isRemoved && (
+          <RemovePlayer
+            player={player}
+            currentPlayer={currentPlayer}
+            allPlayers={allPlayers}
+            onKickPlayer={onKickPlayer}
+          />
+        )}
+        {isRemoved && (
+          <div
+            className={`w-[calc(100%-4rem)] text-center border border-neutral-400 text-neutral-500 rounded-full absolute bottom-6 p-4 right-1/2 transform translate-x-1/2 ${josephinBold.className}`}
+          >
+            No longer in the game
+          </div>
+        )}
+        {currentPlayer?.id !== player?.id && !isRemoved && (
           <Drawer>
             <DrawerTrigger asChild>
               <button

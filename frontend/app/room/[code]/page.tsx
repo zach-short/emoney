@@ -7,7 +7,7 @@ import { playerStore } from "@/lib/utils/playerHelpers";
 import { toast } from "sonner";
 import { josephinBold } from "@/components/ui/fonts";
 import { sendMessage } from "@/lib/utils/sendWsMessage";
-import { ManagePropertiesPayload } from "@/types/payloads";
+import { KickPlayerPayload, ManagePropertiesPayload } from "@/types/payloads";
 import { usePublicFetch } from "@/hooks/use-public-fetch";
 import { roomApi } from "@/lib/utils/api.service";
 import DataState from "@/components/containers/data-state";
@@ -84,6 +84,25 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     });
   };
 
+  const handleKickPlayer = (
+    targetPlayerId: string,
+    disposition: KickPlayerPayload["disposition"],
+    successorPlayerId?: string,
+  ) => {
+    if (!player?.id || !room?.id) return;
+
+    // `successorPlayerId` left undefined is dropped by JSON.stringify, which is
+    // the shape the Go handler reads as "no successor named" -- it is required
+    // there only for a banker target (D5) and refused for any other.
+    sendMessage(ws.current, "KICK_PLAYER", {
+      type: "KICK_PLAYER",
+      roomId: room.id,
+      targetPlayerId,
+      disposition,
+      successorPlayerId,
+    });
+  };
+
   const handlePurchaseProperty = (
     propertyId: string,
     buyerId: string,
@@ -127,7 +146,17 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
 
       refetchPlayers();
 
-      if (["PURCHASE_PROPERTY", "MANAGE_PROPERTIES"].includes(message.type)) {
+      // PLAYER_KICKED belongs here because a `BANK` disposition clears
+      // `playerId` on the target's deeds, and `GetAvailableProperties` is the
+      // read that filters on exactly that -- without the refetch the freed
+      // deeds do not appear in Bank's Properties until some later property
+      // event happens to fire. A `FREEZE` kick writes no property, so this is
+      // one wasted fetch on that arm; the message does not say which arm ran.
+      if (
+        ["PURCHASE_PROPERTY", "MANAGE_PROPERTIES", "PLAYER_KICKED"].includes(
+          message.type,
+        )
+      ) {
         refetchProperties();
       }
     },
@@ -286,6 +315,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
             onFreeParkingAction={handleFreeParkingAction}
             onBankerTransaction={handleBankerTransaction}
             onManageProperties={handleManageProperties}
+            onKickPlayer={handleKickPlayer}
           />
         )
       }
@@ -309,6 +339,11 @@ const getIconForType = (type: string) => {
       return "💵";
     case "MANAGE_PROPERTIES":
       return "🏠";
+    // Matches the pair `eventTypeFor` stores on the history row for the same
+    // notification (`backend/websocket/websocketManager.go`), so the toast and
+    // the event log show the player the same symbol.
+    case "PLAYER_KICKED":
+      return "🚫";
     default:
       return "ℹ️";
   }

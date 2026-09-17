@@ -4,7 +4,7 @@ import PlayerCard from "@/components/players/player-card";
 import { EventHistory, Player, Property, Room } from "@/types/schema";
 import Navbar from "../navbar/navbar";
 import { josephinBold } from "../ui/fonts";
-import { BankerTransactionPayload, FreeParkingPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import { BankerTransactionPayload, FreeParkingPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
 
 const RoomView = ({
   currentPlayer,
@@ -17,6 +17,7 @@ const RoomView = ({
   onFreeParkingAction,
   onBankerTransaction,
   onManageProperties,
+  onKickPlayer,
 }: {
   otherPlayers: Player[];
   eventHistory: EventHistory[];
@@ -54,6 +55,11 @@ const RoomView = ({
     managementType: ManagePropertiesPayload["managementType"],
     properties: { propertyId: string; count?: number }[],
     playerId: string,
+  ) => void;
+  onKickPlayer: (
+    targetPlayerId: string,
+    disposition: KickPlayerPayload["disposition"],
+    successorPlayerId?: string,
   ) => void;
 }) => {
   const allPlayers = [...otherPlayers, currentPlayer];
@@ -98,6 +104,7 @@ const RoomView = ({
               allPlayers={allPlayers}
               onBankerTransaction={onBankerTransaction}
               onManageProperties={onManageProperties}
+              onKickPlayer={onKickPlayer}
             />
           </div>
 
@@ -107,7 +114,12 @@ const RoomView = ({
               the three call sites in `manage-properties.tsx` send
               `currentPlayer.id` as the player to charge, and neither
               `handleManageProperties` nor the property writes check who owns
-              the deed, so it would mortgage their property into your balance. */}
+              the deed, so it would mortgage their property into your balance.
+
+              `onKickPlayer` is passed to both cards, deliberately: a banker
+              removing themselves is in scope through the same flow (D12), so
+              it is not an "other players only" control the way the prop above
+              is. */}
           {otherPlayers?.map((oPlayer) => (
             <div key={oPlayer?.id} className="flex-none snap-center">
               <PlayerCard
@@ -117,6 +129,7 @@ const RoomView = ({
                 allPlayers={allPlayers}
                 roomId={room?.id}
                 onBankerTransaction={onBankerTransaction}
+                onKickPlayer={onKickPlayer}
               />
             </div>
           ))}
