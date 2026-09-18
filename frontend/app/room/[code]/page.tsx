@@ -1,9 +1,9 @@
 "use client";
-import { EventHistory, Player, Property, Room } from "@/types/schema";
+import { EventHistory, Player, Room } from "@/types/schema";
 import { use, useEffect, useEffectEvent, useRef, useState } from "react";
 import RoomView from "@/components/room/room.client";
 import { getWsUrl } from "@/lib/utils/wsHelpers";
-import { playerStore } from "@/lib/utils/playerHelpers";
+import { useStoredPlayerId } from "@/hooks/use-stored-player-id";
 import { toast } from "sonner";
 import { josephinBold } from "@/components/ui/fonts";
 import { sendMessage } from "@/lib/utils/sendWsMessage";
@@ -26,19 +26,15 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   const ws = useRef<WebSocket | null>(null);
-  const storedPlayerId = playerStore.getPlayerIdForRoom(code);
+  const storedPlayerId = useStoredPlayerId(code);
 
   const {
     data: playersData,
     error: playersError,
     loading: playersLoading,
     refetch: refetchPlayers,
-  } = usePublicFetch<{
-    players: Player[];
-    room: Room;
-    eventHistory: EventHistory[];
-  }>(roomApi.getPlayers, {
-    resourceParams: [code, storedPlayerId],
+  } = usePublicFetch(roomApi.getPlayers, {
+    resourceParams: [code],
     dependencies: [code, storedPlayerId],
     enabled: !!code && !!storedPlayerId,
   });
@@ -48,14 +44,11 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     error: propertiesError,
     loading: propertiesLoading,
     refetch: refetchProperties,
-  } = usePublicFetch<{ availableProperties: Property[]; roomId: string }>(
-    roomApi.getProperties,
-    {
-      resourceParams: [code],
-      dependencies: [code],
-      enabled: !!code,
-    },
-  );
+  } = usePublicFetch(roomApi.getProperties, {
+    resourceParams: [code],
+    dependencies: [code],
+    enabled: !!code,
+  });
 
   // Straight projections of the fetched room payload -- no effect needed, and
   // this keeps the players, room and history from lagging a render behind the

@@ -17,6 +17,10 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { CiCircleMinus, CiCirclePlus } from "react-icons/ci";
 import RemovePlayer from "./remove-player";
+import {
+  DRAWER_HEIGHT_COMPACT,
+  DRAWER_HEIGHT_TALL,
+} from "../ui/drawer-sizes";
 
 const PlayerDetails = ({
   player,
@@ -149,38 +153,36 @@ const PlayerDetails = ({
           </DialogContent>
         </Dialog>
         <div
-          className={`${josephinBold.className} w-full absolute top-[6.5rem] right-1/2 transform translate-x-1/2`}
+          className={`${josephinBold.className} flex items-center justify-center space-x-5 w-full`}
         >
-          <div className={`flex items-center justify-center space-x-5 w-full`}>
-            {currentPlayer?.isBanker && !isRemoved && (
-              <CiCircleMinus
-                onClick={() => setDialogState("remove")}
-                className={`hover:cursor-pointer pb-1`}
-              />
-            )}
-            <p> ${player?.balance || 0}</p>{" "}
-            {currentPlayer?.isBanker && !isRemoved && (
-              <CiCirclePlus
-                onClick={() => setDialogState("add")}
-                className={`hover:cursor-pointer pb-1`}
-              />
-            )}
-          </div>
+          {currentPlayer?.isBanker && !isRemoved && (
+            <CiCircleMinus
+              onClick={() => setDialogState("remove")}
+              className={`hover:cursor-pointer pb-1`}
+            />
+          )}
+          <p> ${player?.balance || 0}</p>{" "}
+          {currentPlayer?.isBanker && !isRemoved && (
+            <CiCirclePlus
+              onClick={() => setDialogState("add")}
+              className={`hover:cursor-pointer pb-1`}
+            />
+          )}
         </div>
         <Drawer>
           <DrawerTrigger asChild>
             <button
               type="button"
-              className={`flex items-center justify-between w-full mt-14 rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black`}
+              className={`flex items-center justify-between w-full rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black`}
             >
               <span>{currentPlayer?.id === player?.id && "My"} Properties</span>
               <span>{player?.properties?.length || 0}</span>
             </button>
           </DrawerTrigger>
           <DrawerContent
-            className={`bg-black h-[600px] px-3 text-white  mt-0 border-t border-x border-b-none`}
+            className={`bg-black ${DRAWER_HEIGHT_COMPACT} px-3 text-white  mt-0 border-t border-x border-b-none`}
           >
-            <DrawerTitle className={`text-black select-none`}>
+            <DrawerTitle className={`sr-only`}>
               {player?.id}&apos; Properties
             </DrawerTitle>
             <ManageProperties
@@ -219,8 +221,8 @@ const PlayerDetails = ({
                 Pay or Request
               </button>
             </DrawerTrigger>
-            <DrawerContent className={`h-[90vh] bg-black px-2`}>
-              <DrawerTitle className={`text-black`}>
+            <DrawerContent className={`${DRAWER_HEIGHT_TALL} bg-black px-2`}>
+              <DrawerTitle className={`sr-only`}>
                 Choose Payment Type
               </DrawerTitle>
               <SendReqToggle onToggle={(newType) => setTransferType(newType)} />

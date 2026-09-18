@@ -1,15 +1,18 @@
 import API from "./api";
+import { EventHistory, Player, Property, Room } from "@/types/schema";
 
-const handleApiResponse = (promise: any) => {
+const handleApiResponse = <T>(
+  promise: Promise<{ data: T; status: number }>,
+): Promise<ApiResponse<T>> => {
   return promise
-    .then((response: any) => {
+    .then((response) => {
       return {
         success: true,
         data: response.data,
         status: response.status,
       };
     })
-    .catch((error: any) => {
+    .catch((error) => {
       if (error.message === "Network Error") {
         return {
           success: false,
@@ -42,23 +45,23 @@ const PLAYER_PROPERTIES = (code: string, playerId: string) =>
 const PLAYER_PROPERTY = (code: string, playerId: string, propertyId: string) =>
   `${PLAYER_PROPERTIES(code, playerId)}/${propertyId}`;
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   status?: number;
   error?: any;
 }
 
-async function apiRequest<T = any>(
+async function apiRequest<T>(
   method: "get" | "post" | "put" | "delete",
   endpoint: string,
-  body?: any,
+  body?: unknown,
   params?: Record<string, string>,
 ): Promise<ApiResponse<T>> {
   const url = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const config = params ? { params } : undefined;
 
-  let promise: any;
+  let promise: Promise<{ data: T; status: number }>;
   switch (method) {
     case "get":
       promise = API.get(url, config);
@@ -77,30 +80,87 @@ async function apiRequest<T = any>(
   return handleApiResponse(promise);
 }
 
+// Request bodies, kept local to this file: they are what a form sends, not a
+// domain shape from `types/schema.ts`. Matches `backend/controllers/roomControllers.go`'s
+// `requestBody` structs.
+interface CreateRoomRequest {
+  playerName: string;
+  roomName: string;
+  roomCode: string;
+  playerColor: string;
+  startingCash?: number;
+  houses?: number;
+  hotels?: number;
+}
+
+interface JoinRoomRequest {
+  roomCode: string;
+  playerName: string;
+  playerColor: string;
+}
+
+interface CreateRoomResponse {
+  roomId: string;
+  roomCode: string;
+  playerId: string;
+}
+
+interface GetPlayersResponse {
+  players: Player[];
+  room: Room;
+  eventHistory: EventHistory[];
+  // Only present when the request carried a `playerId` query param -- see
+  // `GetPlayersInRoom` (`backend/controllers/playerControllers.go:108-115`).
+  // Nothing in the frontend passes that param today, so this is never sent
+  // in practice; typed for completeness rather than as a live path.
+  existingPlayer?: { id: string; name: string; color: string; isValid: true };
+}
+
+interface JoinRoomResponse {
+  message: string;
+  playerId: string;
+  players: Player[];
+  room: Room;
+  roomCode: string;
+}
+
 export const roomApi = {
-  create: (data: any) => apiRequest("post", ROOMS_BASE, data),
-  getPlayers: (code: string) => apiRequest("get", ROOM_PLAYERS(code)),
+  create: (data: CreateRoomRequest) =>
+    apiRequest<CreateRoomResponse>("post", ROOMS_BASE, data),
+  getPlayers: (code: string) =>
+    apiRequest<GetPlayersResponse>("get", ROOM_PLAYERS(code)),
   getProperties: (code: string) =>
-    apiRequest("get", `${ROOM(code)}/properties`),
+    apiRequest<{ availableProperties: Property[]; roomId: string }>(
+      "get",
+      `${ROOM(code)}/properties`,
+    ),
   checkExistingRoom: (code: string) =>
-    apiRequest("get", `${ROOM(code)}/exists`),
+    apiRequest<{ exists: boolean }>("get", `${ROOM(code)}/exists`),
 };
 
 export const playerApi = {
-  join: (code: string, data: any) =>
-    apiRequest("post", ROOM_PLAYERS(code), data),
+  join: (code: string, data: JoinRoomRequest) =>
+    apiRequest<JoinRoomResponse>("post", ROOM_PLAYERS(code), data),
 
   getDetails: (code: string, playerId: string) =>
-    apiRequest("get", ROOM_PLAYER(code, playerId)),
+    apiRequest<{ player: Player; properties: Property[] }>(
+      "get",
+      ROOM_PLAYER(code, playerId),
+    ),
 
+  // These three call an empty stub handler on the backend
+  // (`backend/controllers/propertyControllers.go:15-17` -- `MortgageProperty`,
+  // `AddProperty` and `RemoveProperty` all have an empty body, no response at
+  // all) and nothing in the frontend calls them (grepped 2026-09-17). `unknown`
+  // rather than a guessed shape, because there is no real contract yet.
   addProperty: (code: string, playerId: string, propertyId: string) =>
-    apiRequest("post", PLAYER_PROPERTY(code, playerId, propertyId)),
+    apiRequest<unknown>("post", PLAYER_PROPERTY(code, playerId, propertyId)),
 
   removeProperty: (code: string, playerId: string, propertyId: string) =>
-    apiRequest("delete", PLAYER_PROPERTY(code, playerId, propertyId)),
+    apiRequest<unknown>("delete", PLAYER_PROPERTY(code, playerId, propertyId)),
 
   mortgageProperty: (code: string, playerId: string, propertyId: string) =>
-    apiRequest(
+    apiRequest<unknown>(
       "post",
       `${PLAYER_PROPERTY(code, playerId, propertyId)}/mortgage`,
     ),

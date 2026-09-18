@@ -12,12 +12,16 @@ import { josephinBold, josephinNormal } from "../ui/fonts";
 import SelectColorProperties from "../players/purchase-properties-bank";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import FreeParkingDialog from "./free-parking";
 import { playerStore } from "@/lib/utils/playerHelpers";
 import { IoCopyOutline } from "react-icons/io5";
 import { toast } from "sonner";
 import { formatTimeAgo } from "../ui/helper-funcs";
 import ReturnToMenu from "../ui/return-to-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Button } from "../ui/button";
+import { DRAWER_HEIGHT_STANDARD } from "../ui/drawer-sizes";
 
 // Menu rows were click-handled <div>s: no keyboard focus, no hover state, and
 // nothing telling a mouse user they were targets at all.
@@ -49,9 +53,26 @@ const Navbar = ({
   ) => void;
   availableProperties?: Property[];
 }) => {
-  const [showProperties, setShowProperties] = useState(false);
-  const [showFreeParking, setShowFreeParking] = useState(false);
-  const [showEvents, setShowEvents] = useState(false);
+  const router = useRouter();
+  const [view, setView] = useState<
+    "menu" | "properties" | "freeParking" | "events"
+  >("menu");
+  const [confirmClear, setConfirmClear] = useState<"room" | "all" | null>(
+    null
+  );
+
+  const returnToMenu = () => setView("menu");
+
+  const handleConfirmClear = () => {
+    if (confirmClear === "room") {
+      // playerStore keys by room CODE (`room_<code>_playerId`), not roomId.
+      playerStore.clearPlayerDataForRoom(roomCode);
+    } else if (confirmClear === "all") {
+      playerStore.clearAllPlayerData();
+    }
+    setConfirmClear(null);
+    router.push("/");
+  };
 
   return (
     <>
@@ -66,26 +87,18 @@ const Navbar = ({
           </button>
         </DrawerTrigger>
         <DrawerContent
-          className={`${josephinNormal.className} h-[80vh] bg-black border-[1px] px-3 text-xl `}
+          className={`${josephinNormal.className} ${DRAWER_HEIGHT_STANDARD} bg-black border-[1px] px-3 text-xl `}
         >
-          <DrawerTitle className={`text-black`}>Menu</DrawerTitle>
+          <DrawerTitle className={`sr-only`}>Menu</DrawerTitle>
 
           <ul className={`flex flex-col gap-1 h-[75vh] relative`}>
-            {(showProperties || showFreeParking || showEvents) && (
-              <ReturnToMenu
-                onClick={() => {
-                  setShowProperties(false);
-                  setShowFreeParking(false);
-                  setShowEvents(false);
-                }}
-              />
-            )}
-            {showProperties ? (
+            {view !== "menu" && <ReturnToMenu onClick={returnToMenu} />}
+            {view === "properties" ? (
               <>
                 <div
                   className={`${josephinBold.className} bg-black h-full  text-2xl overflow-y-auto`}
                 >
-                  <DrawerTitle className={`select-none text-black h-0`}>
+                  <DrawerTitle className={`sr-only`}>
                     Properties for Sale
                   </DrawerTitle>
                   <SelectColorProperties
@@ -95,16 +108,16 @@ const Navbar = ({
                   />
                 </div>
               </>
-            ) : showFreeParking ? (
+            ) : view === "freeParking" ? (
               <>
                 <FreeParkingDialog
                   player={player}
                   onFreeParkingAction={onFreeParkingAction}
                   freeParking={freeParking}
-                  onClick={() => setShowFreeParking(false)}
+                  onClick={returnToMenu}
                 />
               </>
-            ) : showEvents ? (
+            ) : view === "events" ? (
               <>
                 <div
                   className={`event-history-container overflow-y-auto pb-20`}
@@ -142,7 +155,7 @@ const Navbar = ({
                   <button
                     type="button"
                     className={MENU_ROW}
-                    onClick={() => setShowProperties(true)}
+                    onClick={() => setView("properties")}
                   >
                     <span>Bank&apos;s Properties</span>
                     <span>{availableProperties?.length || 0}</span>
@@ -152,7 +165,7 @@ const Navbar = ({
                   <button
                     type="button"
                     className={MENU_ROW}
-                    onClick={() => setShowFreeParking(true)}
+                    onClick={() => setView("freeParking")}
                   >
                     <span>Free Parking</span>
                     <span>${freeParking}</span>
@@ -162,7 +175,7 @@ const Navbar = ({
                   <button
                     type="button"
                     className={MENU_ROW}
-                    onClick={() => setShowEvents(true)}
+                    onClick={() => setView("events")}
                   >
                     <span>Event History</span>
                     <span>{eventHistory.length}</span>
@@ -208,25 +221,20 @@ const Navbar = ({
                       >
                         Leave Game
                       </Link>{" "}
-                      <Link
-                        href={`/`}
-                        className={`  p-2 border rounded-sm w-full text-lg border-red-300`}
-                        onClick={() => {
-                          // playerStore keys by room CODE (`room_<code>_playerId`).
-                          // Passing roomId cleared nothing, so "Delete My Player"
-                          // left you rejoining as the same player.
-                          playerStore.clearPlayerDataForRoom(roomCode);
-                        }}
+                      <button
+                        type="button"
+                        className={`text-left p-2 border rounded-sm w-full text-lg border-red-300 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
+                        onClick={() => setConfirmClear("room")}
                       >
                         Delete My Player this Game
-                      </Link>
-                      <Link
-                        href={`/`}
-                        className={`w-full text-lg border rounded-sm p-2 border-red-300`}
-                        onClick={() => playerStore.clearAllPlayerData()}
+                      </button>
+                      <button
+                        type="button"
+                        className={`text-left w-full text-lg border rounded-sm p-2 border-red-300 transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
+                        onClick={() => setConfirmClear("all")}
                       >
                         Delete My Players in All Games
-                      </Link>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -235,6 +243,31 @@ const Navbar = ({
           </ul>
         </DrawerContent>
       </Drawer>
+
+      <Dialog
+        open={confirmClear !== null}
+        onOpenChange={(open) => !open && setConfirmClear(null)}
+      >
+        <DialogContent
+          className={`sm:max-w-[425px] ${josephinBold.className} text-black`}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {confirmClear === "all"
+                ? "Delete your players in every game?"
+                : "Delete your player in this game?"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className={`${josephinNormal.className} text-sm text-black`}>
+            {confirmClear === "all"
+              ? "This clears every room's saved player from this device. You won't be able to rejoin any of them as the same player."
+              : "This clears this room's saved player from this device. You won't be able to rejoin as the same player."}
+          </p>
+          <Button variant="destructive" onClick={handleConfirmClear}>
+            {confirmClear === "all" ? "Delete all" : "Delete"}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

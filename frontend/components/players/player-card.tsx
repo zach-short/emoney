@@ -10,6 +10,7 @@ import {
   DrawerTrigger,
 } from "../ui/drawer";
 import MakeOffer from "./make-offer/make-offer";
+import { DRAWER_MIN_HEIGHT_TALL } from "../ui/drawer-sizes";
 
 const PlayerCard = ({
   player,
@@ -69,9 +70,9 @@ const PlayerCard = ({
                 </button>
               </DrawerTrigger>
               <DrawerContent
-                className={`overflow-y-auto min-h-[90vh] bg-black`}
+                className={`overflow-y-auto ${DRAWER_MIN_HEIGHT_TALL} bg-black`}
               >
-                <DrawerTitle className={`hidden`}>Make an offer</DrawerTitle>
+                <DrawerTitle className={`sr-only`}>Make an offer</DrawerTitle>
                 <MakeOffer
                   player={player}
                   currentPlayer={currentPlayer}
