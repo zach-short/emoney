@@ -95,6 +95,18 @@ machine.
 | `backend/websocket/` | The hub (`websocketManager.go`), the upgrade handler, and the event structs | Anything that assumes more than one process |
 | `backend/deploy/` | systemd unit, Caddyfile, `deploy.sh`, env example | Secrets — the real env lives at `/etc/emoney/emoney.env` on the VM |
 
+> **Exception to the `components/ui/` rule, ratified 2026-09-22** (UI-facelift GATE 1, decision
+> `D8` in `docs/incomplete/ui-facelift/DESIGN.md`). The rule narrows to: **regenerate the
+> primitives; the theming layer over them is ours.** Token and `className` changes to
+> `drawer.tsx`, `dialog.tsx`, `sonner.tsx` and `button.tsx` are sanctioned — they are what makes
+> the theme reachable, and wrapping each primitive to avoid the rule would add a file per
+> component to work around a rule whose purpose is already served. Structural edits to generated
+> markup are still forbidden. Note also that only 7 of the 17 files in `frontend/components/ui/`
+> are generated shadcn (verified 2026-09-22); the rest — `button-custom.tsx`, `link.tsx`,
+> `cusotm-link.tsx`, `reason-select.tsx`, `toasts.tsx`, `fonts.ts`, `helper-funcs.ts`,
+> `install-app-button.tsx`, `return-to-menu.tsx`, `loader.tsx` — are hand-written house files the
+> rule never meant to cover.
+
 ## Commands
 
 Package manager: **bun**, in `frontend/` only. Go needs no install step.
