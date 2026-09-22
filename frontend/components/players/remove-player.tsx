@@ -135,8 +135,12 @@ const RemovePlayer = ({
       </button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
+        {/* Pinned light deliberately -- see player-tags.tsx. The option rows
+            below use border-neutral-300/text-black unselected and bg-black
+            text-white selected, so a black card erases both the copy and the
+            selection. Phase 3 restyles it and removes this bg-white. */}
         <DialogContent
-          className={`sm:max-w-[425px] ${josephinBold.className} text-black max-h-[85vh] overflow-y-auto`}
+          className={`sm:max-w-[425px] ${josephinBold.className} bg-white text-black max-h-[85vh] overflow-y-auto`}
         >
           <DialogHeader>
             <DialogTitle>{copy.title}</DialogTitle>

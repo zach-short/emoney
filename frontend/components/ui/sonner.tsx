@@ -1,16 +1,14 @@
 "use client"
 
-import { useTheme } from "next-themes"
 import { Toaster as Sonner } from "sonner"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
-
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      // The app is dark-only (D1); there is no theme to resolve.
+      theme="dark"
       className="toaster group"
       // The room's notifications are top-center and were landing squarely on
       // the room name in the sticky header (h-16). Clear it.

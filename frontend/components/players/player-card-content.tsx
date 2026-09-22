@@ -122,7 +122,7 @@ const PlayerDetails = ({
           onOpenChange={(open) => !open && setDialogState(null)}
         >
           <DialogContent
-            className={`sm:max-w-[425px] ${josephinBold.className} text-black top-1/3`}
+            className={`sm:max-w-[425px] ${josephinBold.className} top-1/3`}
           >
             <DialogHeader>
               <DialogTitle>
@@ -178,7 +178,7 @@ const PlayerDetails = ({
             </button>
           </DrawerTrigger>
           <DrawerContent
-            className={`bg-black h-[600px] px-3 text-white  mt-0 border-t border-x border-b-none`}
+            className={`h-[600px] px-3 mt-0 border-t border-x border-b-none`}
           >
             <DrawerTitle className={`text-black select-none`}>
               {player?.id}&apos; Properties
@@ -219,7 +219,7 @@ const PlayerDetails = ({
                 Pay or Request
               </button>
             </DrawerTrigger>
-            <DrawerContent className={`h-[90vh] bg-black px-2`}>
+            <DrawerContent className={`h-[90vh] px-2`}>
               <DrawerTitle className={`text-black`}>
                 Choose Payment Type
               </DrawerTitle>

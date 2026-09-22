@@ -264,7 +264,10 @@ const PlayerTags = ({
         open={selectedTag !== null}
         onOpenChange={() => setSelectedTag(null)}
       >
-        <DialogContent className="sm:max-w-[425px] text-black">
+        {/* Pinned light deliberately. Phase 1 made bg-background black, and
+            everything inside this dialog is written for a light card. Phase 3
+            (materials, D2/D4) restyles it and removes this bg-white. */}
+        <DialogContent className="sm:max-w-[425px] bg-white text-black">
           <DialogHeader>
             <DialogTitle
               className={`flex items-center gap-2 ${selectedTag?.color} text-white p-2 rounded-lg ${josephinBold.className}`}

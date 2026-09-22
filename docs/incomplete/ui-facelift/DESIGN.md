@@ -84,6 +84,28 @@ away: this change is invisible when it works, it has the widest blast radius of 
 and there is no frontend test runner to catch a regression in it (§5). That is precisely why its
 `done when` in `PLAN.md` is a described walkthrough and not a green gate.
 
+**As built, 2026-09-22 — Phase 1 (`PLAN.md`).** The decision stands; four things about it were
+wrong or unstated, recorded here rather than in a changelog.
+
+- **"The six pasted `bg-black text-white` literals" is not the shape they are in.** The six sites
+  and line numbers are right; only three carry a `text-white` (`player-card-content.tsx:181`,
+  `color-select-drawer.tsx:89`, `reason-select.tsx:51`). The other three are `bg-black` alone.
+- **"Redefined to e-money's actual ground" resolved to pure `#000` / `#fff`**, not to a near-black.
+  `bg-black` and `text-white` are exactly `#000` and `#fff`, and Phase 1's done-when required the
+  six drawers to be pixel-unchanged. `--primary` and `--ring` flip to light; every other token
+  keeps the value it renders with today. D2 owns any move off that ground.
+- **`next-themes` came out and the toast kept its token classNames.** `sonner.tsx` now sets
+  `theme="dark"` literally. What pinned the toast light was the resolved theme plus light `:root`
+  values — not the `group-[.toaster]:bg-background` classes, which with one token set *are* the
+  dark ground.
+- **One ground has two dated exceptions, both dialogs, both owed to Phase 3.**
+  `player-tags.tsx:267` and `remove-player.tsx:139` are pinned `bg-white` (`PLAN.md` BD-4, Zach's
+  call 2026-09-22): their interiors are written for a white card, and the token change made both
+  unreadable — measured in the running app, black text on a black card. They keep exactly today's
+  appearance until Phase 3 restyles them. **This is not a supersession of D1**: the ground is
+  still one token set and no literal ground was added anywhere else. The banker's Add-Money dialog
+  needed no exception — its own `text-black` came out (BD-3) and it renders correctly dark.
+
 ### D2 — Greyscale chrome; the yellow is identity only. Ratified 2026-09-22. (§6.2 → §3-B: B3 + B1)
 
 The chrome goes greyscale on a near-black ground. **Player colour and property-group colour are

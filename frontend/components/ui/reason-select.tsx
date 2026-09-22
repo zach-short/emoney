@@ -48,7 +48,7 @@ export function ReasonSelect({
         </button>
       </DrawerTrigger>
       <DrawerContent
-        className={`${sulpherBold.className} bg-black text-white h-[70vh]`}
+        className={`${sulpherBold.className} h-[70vh]`}
       >
         <DrawerHeader>
           <DrawerTitle>Select Reason</DrawerTitle>

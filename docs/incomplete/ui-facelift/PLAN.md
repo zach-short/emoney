@@ -93,6 +93,29 @@ light. Removing the dep separately would mean touching `sonner.tsx` twice.
 *Reversal:* leave `"next-themes": "^0.4.4"` in `package.json:22` and delete only the `useTheme`
 call. The dependency is inert either way; nothing else imports it.
 
+**BD-3 — Phase 1 removes the banker dialog's own `text-black` (`player-card-content.tsx:125`).**
+Taken 2026-09-22 while building. The phase's done-when walks this dialog and requires it to render
+on the dark ground; its `DialogContent` carried `text-black`, which was correct while
+`bg-background` was white and is black-on-black after. It is the same species as D9(c)'s two
+`/install` strings — invisible *because of* this phase — so it is a consequence, not a drive-by.
+Its contents are an `Input` and a `Button`, both token-driven, so nothing else in it assumes a
+light card.
+*Reversal:* put `text-black` back at `player-card-content.tsx:125`; the dialog's title and labels
+go black-on-black again.
+
+**BD-4 — the other two dialogs are pinned light with `bg-white`, deliberately, for Phase 3 to
+clear.** `player-tags.tsx:267` and `remove-player.tsx:139`. **Zach's call, asked and answered in
+chat 2026-09-22**, against fixing them dark now or leaving them broken. Both were written for a
+white card and both were confirmed unreadable after the token change in the running app:
+player-tags' two `h4`s and two `p`s compute `rgb(0,0,0)` on an `rgb(0,0,0)` card; remove-player's
+title, body and *unselected* options likewise, while its selected row (`bg-black text-white`)
+survives only by accident. Fixing them dark means re-styling `border-neutral-300`,
+`hover:bg-black/5` and the selected row's inversion — palette calls D2 reserves for Phase 3. The
+pin keeps both exactly as they render today and is one class each, with a comment at each site
+naming Phase 3.
+*Reversal:* delete the two `bg-white` classes and their comments. Do not do it without restyling
+the interiors — that is Phase 3's item 5 below.
+
 ---
 
 ## 2. Phases
@@ -117,8 +140,47 @@ at `tight`** — a `tight` phase is one that needs splitting.
 
 ### Phase 1 — The theme substrate
 
-**Status: `PLANNED`. Lane 1. Driver: Opus 5. Waits on: nothing — GATE 2 approved 2026-09-22.**
-Implements **D1** and **D9(c)**; carries **BD-2**.
+**Status: `BUILT` 2026-09-22, Opus 5, in worktree `.claude/worktrees/ui-facelift` (branch
+`worktree-ui-facelift`, on top of `c896b0e`). The commit is Zach's; its hash goes in this header
+when it lands.** Lane 1. Implements **D1** and **D9(c)**; carries **BD-2**, and took **BD-3** and
+**BD-4** while building.
+
+**Gates — all run from `frontend/` after the last edit, 2026-09-22.** `bun run lint`: 75 files,
+0 errors, 0 warnings (counted from `eslint . -f json`, not inferred from a silent pass).
+`bunx tsc --noEmit`: clean. `bun run build`: 11/11 static pages, 10 routes. `bun install`:
+487 packages, one fewer than before, `next-themes` removed.
+
+**As built — five things the plan did not have right.**
+
+1. **The six literals are not six `bg-black text-white` strings.** The six *sites* and their line
+   numbers were exactly right, but only three carry a `text-white` at all: `navbar.tsx:69`,
+   `player-card.tsx:115` and `player-card-content.tsx:222` are `bg-black` alone, and
+   `player-card-content.tsx:181` has the two non-adjacent. What came out at each site is
+   `bg-black`, plus `text-white` where it was present; every other class was kept.
+2. **The token values are a port of what renders, not of the `.dark` block.** `--background` is
+   `0 0% 0%` and `--foreground` `0 0% 100%` — pure black and white, because `bg-black` *is*
+   `#000` and `text-white` *is* `#fff`, and the done-when requires the drawers to be unchanged;
+   `.dark`'s near-black `240 10% 3.9%` would have shifted all six by a visible step. `--primary`
+   flips to `0 0% 98%` (the done-when's filled-button requirement) and `--ring` to
+   `240 4.9% 83.9%`, because a near-black focus ring on a black ground is no ring. **Every other
+   token keeps the value it renders with today** — `--border` and `--input` stay near-white
+   `240 5.9% 90%`, `--muted` stays light so the drawer's grab handle is unchanged, `--destructive`
+   stays the bright red. `--card` and `--popover` follow the ground; nothing consumes them
+   (grepped 2026-09-22).
+3. **Scope step 5 was wrong about what pins the toast light, so it was implemented by its stated
+   goal, not its letter.** The `group-[.toaster]:bg-*` classes at `sonner.tsx:21` do not defeat
+   the resolved theme — with one token set they *are* the dark ground, and deleting them would
+   hand the toast to sonner's own palette. What pinned it light was `theme` resolving through
+   `next-themes` with `:root` holding light values. So: the `useTheme` call is gone (BD-2) and
+   `theme="dark"` is set literally; the token classNames stay.
+4. **`reason-select.tsx` cannot be walked, because nothing renders it.** Its only import is
+   commented out at `p2p-custom-transfer.tsx:4` (`grep -rn "reason-select\|ReasonSelect" app
+   components hooks lib`, 2026-09-22, two hits: its own definition and that comment). The literal
+   came out; the drawer is unreachable dead code, and both files are already board row 1 / TRIAGE
+   B5's (`DESIGN.md` *Rules that survive unchanged* #3).
+5. **The plan inventoried drawers and missed dialogs.** See BD-3 and BD-4 — three `DialogContent`
+   sites exist (`grep -rn "<DialogContent"`, 2026-09-22) and all three were written for the white
+   card `bg-background` used to give them.
 
 **Scope.**
 1. Replace the stock zinc `:root` block (`globals.css:6-32`) with e-money's own single dark token
@@ -283,6 +345,20 @@ Implements **D4**, **D2** and **D9(a)**.
    `offset={76}` at `:17` does not apply at phone widths — 0.11, 0.12); raise the toast to
    `text-sm` at `page.tsx:202,211`; set `visibleToasts` to 3. Leave `duration: 4000` alone.
 6. **Do not glass the player card or the property deed.** They are paper (D4).
+7. **Clear Phase 1's two pinned dialogs (BD-4), added 2026-09-22 — this is not optional, it is a
+   debt with a date.** `player-tags.tsx:267` and `remove-player.tsx:139` each carry a deliberate
+   `bg-white` and a comment naming this phase. Restyle both interiors for the dark ground, then
+   delete the pin and the comment: in `player-tags.tsx` that is four `text-black` children
+   (`:279,283,289,293`); in `remove-player.tsx` it is the `DialogContent`'s own `text-black`, the
+   `OptionRow` unselected state (`border-neutral-300 text-black hover:bg-black/5`, `:55`) and the
+   **selected** state (`border-black bg-black text-white`, `:55`), which inverts to white-on-black
+   and therefore disappears on a black card — that inversion is the real decision here, and it is
+   D2's to make. **Do not delete a pin without restyling the interior**; that is the state Phase 1
+   measured and refused to ship.
+8. **Do not restyle `input` here without deciding what a field is.** Phase 1 left
+   `ui/input.tsx`'s `bg-transparent` untouched and could not verify how it paints (see Phase 1's
+   runtime entry R1.5). A field on the dark ground is a materials decision and belongs to this
+   phase if it belongs anywhere.
 
 **Subagents.** None. Three files plus a token block; the judgment is visual and belongs in one
 context.

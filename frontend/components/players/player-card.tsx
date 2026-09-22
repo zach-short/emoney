@@ -112,7 +112,7 @@ const PlayerCard = ({
                 </button>
               </DrawerTrigger>
               <DrawerContent
-                className={`overflow-y-auto min-h-[90vh] bg-black`}
+                className={`overflow-y-auto min-h-[90vh]`}
               >
                 <DrawerTitle className={`hidden`}>
                   {isSelf ? "Your offers" : "Make an offer"}

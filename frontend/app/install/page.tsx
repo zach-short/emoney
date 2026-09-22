@@ -52,7 +52,7 @@ function InstallPrompt() {
         <CustomLink text="E-Money" href="/" className="top-2 left-2" />
         <Link
           href="/"
-          className={`border font rounded-lg p-4 border-yellow-200 w-64  text-black text-2xl`}
+          className={`border font rounded-lg p-4 border-yellow-200 w-64 text-2xl`}
         >
           Home
         </Link>
@@ -67,7 +67,7 @@ function InstallPrompt() {
         <Button onClick={handleInstallClick}>Install E-Money</Button>
       )}
       {isIOS && (
-        <p className={`text-black`}>
+        <p>
           To install this app on your iOS device, tap the share button
           <span role="img" aria-label="share icon">
             {" "}
