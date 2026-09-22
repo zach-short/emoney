@@ -1,0 +1,32 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "emoney-frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && NEXT_PUBLIC_API_URL=https://api.emoney.club NEXT_PUBLIC_API_URL_NO_PREFIX=api.emoney.club npx next dev --port 3000"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "trades-frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/zachshort/Projects/emoney/.claude/worktrees/trades/frontend && NEXT_PUBLIC_API_URL=https://api.emoney.club NEXT_PUBLIC_API_URL_NO_PREFIX=api.emoney.club npx next dev --port 3000"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "auction-frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/zachshort/Projects/emoney/.claude/worktrees/kick-phase4/frontend && NEXT_PUBLIC_API_URL=http://localhost:8090 NEXT_PUBLIC_API_URL_NO_PREFIX=localhost:8090 npx next dev --port 3100"
+      ],
+      "port": 3100
+    }
+  ]
+}
