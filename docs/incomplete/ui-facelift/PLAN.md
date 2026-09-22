@@ -141,8 +141,8 @@ at `tight`** — a `tight` phase is one that needs splitting.
 ### Phase 1 — The theme substrate
 
 **Status: `BUILT` 2026-09-22, Opus 5, in worktree `.claude/worktrees/ui-facelift` (branch
-`worktree-ui-facelift`, on top of `c896b0e`). The commit is Zach's; its hash goes in this header
-when it lands.** Lane 1. Implements **D1** and **D9(c)**; carries **BD-2**, and took **BD-3** and
+`worktree-ui-facelift`, on top of `c896b0e`). **Committed by Zach as `6b02528`** — 17 files,
++235/-54. NOT merged to `main`.** Lane 1. Implements **D1** and **D9(c)**; carries **BD-2**, and took **BD-3** and
 **BD-4** while building.
 
 **Gates — all run from `frontend/` after the last edit, 2026-09-22.** `bun run lint`: 75 files,
