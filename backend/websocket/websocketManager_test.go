@@ -487,6 +487,65 @@ func TestBankTransactionReportsMalformedRoomIDAsATargetPlayerError(t *testing.T)
 	wantErrContains(t, err, "invalid target player ID")
 }
 
+// --- the bank transaction amount floor (board row 15) ---
+//
+// strconv.Atoi parses "-100", and the direction actually applied comes from
+// transactionType (BANKER_ADD/BANKER_REMOVE) rather than amount's sign - so
+// before this floor existed, a negative amount silently reversed the real
+// effect while the notification text kept describing transactionType's
+// direction. A banker who fat-fingered a minus sign got a notification that
+// lied about which way the money moved. Same shape as the transfer floor
+// above (board row 14).
+
+func TestBankTransactionRejectsNegativeAmount(t *testing.T) {
+	// Both player-relevant ids are valid here on purpose: without the floor
+	// this payload reaches controllers.GetPlayer and panics on the nil
+	// config.DB, so the "not panicked" check is what proves the floor
+	// rejected it rather than something further down.
+	payload := validBankPayload()
+	payload["amount"] = "-100"
+
+	err, panicked := bankTransactionOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a bank transaction has to be at least $1")
+}
+
+func TestBankTransactionRejectsZeroAmount(t *testing.T) {
+	// $0 moves no money, so it is a noise bug rather than a money one: it
+	// still writes an event-history row and toasts the whole room about a
+	// transaction that did not happen. Refused with the negatives, same as
+	// transfer and free parking.
+	payload := validBankPayload()
+	payload["amount"] = "0"
+
+	err, panicked := bankTransactionOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a bank transaction has to be at least $1")
+}
+
+func TestBankTransactionChecksTheAmountBeforeTheTransactionType(t *testing.T) {
+	// A mutation check on placement, not on behaviour. The floor sits
+	// directly under the Atoi, above every other field parse including the
+	// transactionType switch - so a payload that is wrong in both ways
+	// reports the amount. Move the floor below the switch and this test
+	// reports "invalid transaction type: BANKER_ADDED" instead; move it into
+	// bankTransactionRejection or past controllers.GetPlayer and this test
+	// panics on the nil config.DB.
+	payload := validBankPayload()
+	payload["amount"] = "-100"
+	payload["transactionType"] = "BANKER_ADDED"
+
+	err, _ := bankTransactionOutcome(t, payload)
+
+	wantErrEqual(t, err, "a bank transaction has to be at least $1")
+}
+
 // --- freeParking ---
 
 // freeParkingOutcome is bankTransactionOutcome for the free parking handler,
