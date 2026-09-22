@@ -750,6 +750,130 @@ func TestFreeParkingChecksTheAmountBeforeTheFreeParkingType(t *testing.T) {
 	wantErrEqual(t, err, "a free parking amount has to be at least $1")
 }
 
+// --- handlePropertyPurchase's price floor (board row 24) ---
+//
+// The price arrives as a bare JSON number and, until 2026-09-22, nothing
+// anywhere looked at it: controllers.PurchaseProperty $inc'd the balance by
+// -price with no read, no session and no check, so a negative price credited
+// the buyer AND handed them the deed in one unauthenticated frame. The floor
+// below is the payload half of the fix; the state half - a frozen buyer, a deed
+// already sold, a balance that cannot cover the price - is
+// controllers.propertyPurchaseRejection, tested in
+// controllers/propertyControllers_test.go because it needs values only the
+// transaction can read.
+
+// purchaseOutcome is freeParkingOutcome for the purchase handler, and it exists
+// for the same reason: a price the floor accepts reaches
+// controllers.PurchaseProperty and panics on the nil config.DB at
+// config.DB.Client() rather than erroring. That panic is the only signal
+// available here that a payload was accepted rather than rejected, which is
+// what makes the "not panicked" half of the assertions below mean anything.
+func purchaseOutcome(t *testing.T, payload any) (err error, panicked bool) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+		}
+	}()
+	err = NewRoomManager().handlePropertyPurchase(testClient(), Message{
+		Type:    "PURCHASE_PROPERTY",
+		Payload: payload,
+	})
+	return err, false
+}
+
+func TestPropertyPurchaseRejectsANegativePrice(t *testing.T) {
+	// The exploit as row 24 states it: -1000 pays the buyer $1000 out of the
+	// Bank and gives them the deed. Both ids are valid here on purpose, so
+	// without the floor this payload reaches Mongo and panics - the "not
+	// panicked" check is what proves the floor turned it away rather than
+	// something further down.
+	payload := validPurchasePayload()
+	payload["price"] = float64(-1000)
+
+	err, panicked := purchaseOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a property purchase has to be at least $1")
+}
+
+func TestPropertyPurchaseRejectsAZeroPrice(t *testing.T) {
+	// $0 moves no money, so it is a noise bug rather than a money one - it
+	// writes an event-history row and toasts the whole room about a purchase
+	// that cost nothing. Refused with the negatives, same as a transfer, a free
+	// parking amount and a bid.
+	payload := validPurchasePayload()
+	payload["price"] = float64(0)
+
+	err, panicked := purchaseOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a property purchase has to be at least $1")
+}
+
+func TestPropertyPurchaseRejectsAFractionalPriceUnderADollar(t *testing.T) {
+	// int(priceFloat) truncates toward zero, so 0.99 arrives at the floor as 0.
+	// Pinned because the truncation is invisible at the call site: a floor
+	// written as `priceFloat < 1` and a floor written after the conversion agree
+	// here, but one written as `price != 0` would let this through and buy a
+	// deed for nothing.
+	payload := validPurchasePayload()
+	payload["price"] = float64(0.99)
+
+	err, panicked := purchaseOutcome(t, payload)
+
+	if panicked {
+		t.Fatal("expected a rejection before the database, got a panic")
+	}
+	wantErrEqual(t, err, "a property purchase has to be at least $1")
+}
+
+func TestPropertyPurchaseChecksThePriceBeforeTheIDs(t *testing.T) {
+	// A mutation check on placement, not on behaviour. The floor sits directly
+	// under the price conversion, above both id parses - so a payload that is
+	// wrong in both ways reports the price. Move the floor below the parses and
+	// this reports the buyer id instead; move it out of the handler entirely and
+	// the three tests above panic on the nil config.DB.
+	payload := validPurchasePayload()
+	payload["price"] = float64(-1000)
+	payload["buyerId"] = "not-an-object-id"
+
+	err, _ := purchaseOutcome(t, payload)
+
+	wantErrEqual(t, err, "a property purchase has to be at least $1")
+}
+
+func TestPropertyPurchaseAcceptsAPriceOfADollar(t *testing.T) {
+	// The bottom of the accepted range, and the proof the floor is a floor
+	// rather than a wall: $1 clears it and reaches the database, where there is
+	// no Mongo to serve it. Whether the buyer can afford that $1, and whether
+	// the deed is still for sale, are decided inside the transaction - see
+	// controllers/propertyControllers_test.go.
+	payload := validPurchasePayload()
+	payload["price"] = float64(1)
+
+	err, panicked := purchaseOutcome(t, payload)
+
+	if !panicked {
+		t.Fatalf("expected a $1 price to be accepted and reach the database, got %v", err)
+	}
+}
+
+func TestPropertyPurchaseAcceptsAFacePrice(t *testing.T) {
+	// The ordinary frame the frontend sends: the property's own price, off the
+	// available-properties list (frontend/components/players/
+	// purchase-properties-bank.tsx:54). It must still reach the database.
+	err, panicked := purchaseOutcome(t, validPurchasePayload())
+
+	if !panicked {
+		t.Fatalf("expected a valid purchase to reach the database, got %v", err)
+	}
+}
+
 // --- wrong-typed payload fields ---
 //
 // Every payload field these handlers read as a string used to be a single-value
@@ -1507,14 +1631,16 @@ func TestManagePropertiesAcceptsAnActivePlayer(t *testing.T) {
 }
 
 // --- propertyPurchaseRejection (the actor) ---
-
-func TestPropertyPurchaseRefusesARemovedBuyer(t *testing.T) {
-	wantErrEqual(t, propertyPurchaseRejection(removedPlayer()), "a removed player cannot buy property")
-}
-
-func TestPropertyPurchaseAcceptsAnActiveBuyer(t *testing.T) {
-	wantNoRejection(t, propertyPurchaseRejection(activePlayer()))
-}
+//
+// Moved, not dropped. On 2026-09-22 the purchase rule grew a price floor, a
+// balance check and a still-for-sale check, which need the deed and the buyer
+// as the transaction re-reads them - so the rule moved into
+// controllers.PurchaseProperty's transaction, and this package cannot be
+// imported from there. The frozen-buyer assertion that stood here is
+// TestPurchaseRejectionRefusesARemovedBuyer in
+// controllers/propertyControllers_test.go, with its sentence unchanged. What is
+// still tested here is the price floor, at the top of this file with the rest
+// of the payload-shape checks, because that one stayed in the handler.
 
 // --- bankTransactionRejection (the target, which is the different one) ---
 
