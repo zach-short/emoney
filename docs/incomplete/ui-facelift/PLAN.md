@@ -1,13 +1,19 @@
 # PLAN — UI facelift: two lanes, six phases
 
-**Status: PLANNED 2026-09-22.** Written by an Opus 5 session in the worktree
+**Status: `PLANNED`. GATE 2 approved 2026-09-22.** Written by an Opus 5 session in the worktree
 `.claude/worktrees/ui-facelift` (branch `worktree-ui-facelift`, cut from `main` at `c14faa5`).
 Stage 4 of `docs/AGENT-PRACTICES.md` §2.2. Its input is `DESIGN.md` beside this file, whose §0
 holds the ten decisions ratified 2026-09-22.
 
-**This plan stops at GATE 2.** No component code, no CSS and no dependency has been written or
-installed by the session that wrote it. The phase table below goes to the owner for approval
-before any of it is built.
+**GATE 2 — approved by Zach 2026-09-22.** Per `AGENT-PRACTICES.md` §2.2 the approval authorizes
+the whole run: phases do not each need re-approval. It also carries the two installs this plan
+was pre-approved only to *propose* — `@radix-ui/react-popover` (Phase 4) and `motion`
+(Phase 5) — which may now be installed inside their own phase and nowhere earlier.
+**Lane 2's hold is not what GATE 2 releases**: it waits on board row 29 landing on
+`app/room/[code]/page.tsx`, and that wait is still live.
+
+**The session that wrote this plan wrote no code** — no component file, no CSS and no dependency
+was touched by it.
 
 **`DESIGN.md` is *what and why*. This file is *in what order, by whom, done when*.** Where a
 phase's scope and the design disagree on a number, §0 below wins and says so.
@@ -93,7 +99,7 @@ call. The dependency is inert either way; nothing else imports it.
 
 | # | Phase | Driver | Subagents | Est. context | Why that shape |
 |---|---|---|---|---|---|
-| **Lane 1 — buildable on GATE 2 approval. No collision with board row 29.** |
+| **Lane 1 — buildable now; GATE 2 approved 2026-09-22. No collision with board row 29.** |
 | 1 | The theme substrate | Opus 5 | none | full | One CSS file, one `layout.tsx` line, six literal deletions — small in diff, widest blast radius in the document, and invisible when correct. The cost is the walkthrough, not the edit |
 | 2 | Type, and one money formatter | Opus 5 | **Sonnet 5 × 1** — call-site inventory only | full | 100 interpolations across 36 files (0.25) is a *reading* cost, not a reasoning one. Delegating the map is what keeps this phase under its ceiling |
 | 3 | Materials, elevation and the toast | Opus 5 | none | comfortable | Four surfaces, three files, one dial table. The narrowest phase here |
@@ -111,7 +117,7 @@ at `tight`** — a `tight` phase is one that needs splitting.
 
 ### Phase 1 — The theme substrate
 
-**Status: `PLANNED`. Lane 1. Driver: Opus 5. Waits on: GATE 2 only.**
+**Status: `PLANNED`. Lane 1. Driver: Opus 5. Waits on: nothing — GATE 2 approved 2026-09-22.**
 Implements **D1** and **D9(c)**; carries **BD-2**.
 
 **Scope.**
