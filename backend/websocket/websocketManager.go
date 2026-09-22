@@ -76,6 +76,47 @@ func (rm *RoomManager) SeatClient(client *Client, playerID, playerName string) {
 	client.PlayerName = playerName
 }
 
+// roomClients returns the clients in room at this instant, copied out under
+// the read lock so that the caller can do its network I/O without it. The
+// lock is released by defer, so nothing that panics on the way out - nothing
+// in here can, but Broadcast's fan-out used to sit inside this scope - leaves
+// rm.mu read-locked for good, which would be the same process-wide stall a
+// dead socket used to cause, with no TCP timeout to end it. A *Client copied
+// here stays a valid pointer after its own goroutine removes it from the map;
+// the worst case is one failed write to a closed conn.
+func (rm *RoomManager) roomClients(room string) []*Client {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	clients := make([]*Client, 0, len(rm.clients[room]))
+	for client := range rm.clients[room] {
+		clients = append(clients, client)
+	}
+	return clients
+}
+
+// roomClientsSeatedAs returns the clients in room seated as playerID at this
+// instant, copied out under the read lock so that the caller can do its
+// network I/O without it. It is roomClients with the filter moved inside the
+// lock, and the filter is inside on purpose rather than left in the caller's
+// loop: invariant 7 (HANDOFF.md) is that Client.PlayerID is written only
+// through SeatClient, which holds rm.mu.Lock(), and read from another
+// player's goroutine only under rm.mu. A caller that ranged over roomClients
+// and compared PlayerID itself would be doing that read with no lock at all -
+// a data race on a string, two words the runtime is entitled to let tear,
+// against every JOIN in the room. Broadcast has no such read, which is why it
+// needs no sibling of this; SendTo's whole job is that read.
+func (rm *RoomManager) roomClientsSeatedAs(room, playerID string) []*Client {
+	rm.mu.RLock()
+	defer rm.mu.RUnlock()
+	var clients []*Client
+	for client := range rm.clients[room] {
+		if client.PlayerID == playerID {
+			clients = append(clients, client)
+		}
+	}
+	return clients
+}
+
 // Broadcast is the single fan-out point for every room message. It refuses to
 // send a message whose "notification" field is present but empty (or present
 // and not a string). Every websocket money handler in this package builds a
@@ -103,31 +144,52 @@ func (rm *RoomManager) Broadcast(room string, message Message) {
 		return
 	}
 
+	// The fan-out holds no lock. It used to run under rm.mu.RLock(), and a
+	// write to one stalled peer - a tab whose socket buffer had filled, a
+	// phone that had lost the network - blocked that goroutine with the read
+	// lock held. The next RemoveClient then waited on rm.mu.Lock(), and
+	// because an RWMutex refuses new readers while a writer is waiting, every
+	// later Broadcast in every room, every join and every leave in the
+	// process queued behind one dead socket, for as long as TCP took to give
+	// up - about fifteen minutes on Linux defaults. Client.WriteJSON's
+	// deadline now bounds any one write, but a bounded process-wide stall is
+	// still a process-wide stall: the room is copied out under the read lock
+	// in roomClients and written to after it is released, so the hub lock
+	// never covers a network write, and a panic in the fan-out has no read
+	// lock to leak.
+	//
+	// What the snapshot gives up is nothing that was promised. A client that
+	// leaves mid-fan-out is written to once more; its conn is closed by then,
+	// so the write fails, it lands in dead, and deleting a client the room has
+	// already dropped is a no-op below. Two broadcasts from two goroutines
+	// were never ordered against each other - both held RLock and interleaved
+	// freely - and each still delivers in its own order to every client,
+	// because this loop is sequential. What a stalled peer costs now is up to
+	// writeWait of this goroutine's time, once, and of any other broadcaster
+	// to the same room that queues on that client's writeMu meanwhile; the
+	// first timeout closes the conn and latches its error, so nobody pays
+	// twice.
+	//
 	// The dead clients are collected here and deleted below, under the write
-	// lock, because RLock does not exclude another RLock: two broadcasts to the
-	// same room would otherwise delete from one Go map at once, and the runtime
-	// answers that with fatal("concurrent map writes") - not a panic, so Gin's
-	// Recovery does not catch it and the one backend process dies. The fan-out
-	// keeps the read lock so broadcasts to different rooms still overlap while
-	// each does its per-client network I/O.
+	// lock, because the fan-out holds no lock, and RLock would not have been
+	// enough anyway: two broadcasts to the same room deleting from one Go map
+	// at once is answered by the runtime with fatal("concurrent map writes"),
+	// not a panic, so Gin's Recovery does not catch it and the one backend
+	// process dies.
 	var dead []*Client
-
-	rm.mu.RLock()
-	if clients, ok := rm.clients[room]; ok {
-		for client := range clients {
-			// Client.WriteJSON, not client.Conn.WriteJSON: rm.mu orders access
-			// to the room map, not to any one conn's writer, and two broadcasts
-			// to the same room both hold RLock while writing to the same conns.
-			// The per-client lock is what keeps one goroutine at a time inside
-			// gorilla's writer - see the Client doc comment in types.go.
-			err := client.WriteJSON(message)
-			if err != nil {
-				client.Conn.Close()
-				dead = append(dead, client)
-			}
+	for _, client := range rm.roomClients(room) {
+		// Client.WriteJSON, not client.Conn.WriteJSON: nothing here orders
+		// access to any one conn's writer. Two broadcasts to the same room
+		// write to the same conns at once, and so does handler.go's ERROR
+		// reply on a player's own conn. The per-client lock is what keeps one
+		// goroutine at a time inside gorilla's writer, and the deadline it
+		// arms is what keeps that goroutine from staying there - see the
+		// Client doc comment in types.go.
+		if err := client.WriteJSON(message); err != nil {
+			client.Conn.Close()
+			dead = append(dead, client)
 		}
 	}
-	rm.mu.RUnlock()
 
 	if len(dead) == 0 {
 		return
@@ -142,6 +204,93 @@ func (rm *RoomManager) Broadcast(room string, message Message) {
 			delete(clients, client)
 		}
 	}
+}
+
+// SendTo writes message to every live connection in room that is seated as
+// playerID, and reports how many it reached. It is the targeted counterpart of
+// Broadcast, and it exists because an offer is not room news: a trade proposal
+// goes to the one player it was made to, and the sender gets their own
+// confirmation, while everyone else in the room sees nothing until the trade
+// settles.
+//
+// A player with two tabs open has two *Clients with the same PlayerID, and
+// this sends to all of them. Decided here rather than left to fall out of the
+// loop: the alternative - first match wins - would put the offer on whichever
+// tab happened to be first in map iteration order, which is random in Go, so
+// a player looking at the other tab would see nothing arrive and the toast
+// would fire on a screen nobody was reading. Every tab is the same person and
+// every tab refetches the inbox on its next message anyway; the cost of
+// sending to all of them is one extra frame.
+//
+// The lock discipline is Broadcast's, exactly, and for the same reason: the
+// targets are snapshotted under the read lock, written to holding no lock at
+// all, and the dead among them deleted under the write lock - because two
+// RLock holders deleting from one Go map is fatal("concurrent map writes"),
+// which is not a panic, so Gin's Recovery does not catch it and the single
+// backend process dies.
+//
+// The fan-out holds no lock because a write to a stalled peer - a phone that
+// lost the network, a tab the browser froze - blocks until Client.WriteJSON's
+// deadline fires, and doing that under rm.mu.RLock() made every Lock caller
+// and, per RWMutex's writer preference, every later RLock caller in every room
+// wait it out. Board row 11 took that shape out of Broadcast; this is the same
+// removal here. Bounded by the deadline is not the same as absent: ten seconds
+// of a frozen hub is still a frozen hub, and the peer that causes it is one
+// player's phone.
+//
+// The PlayerID filter rides inside the snapshot rather than this loop, which
+// is the one way SendTo is not simply Broadcast with an if. Invariant 7
+// (HANDOFF.md) is that Client.PlayerID is written only through SeatClient
+// under rm.mu.Lock(); comparing it out here, after the lock is released, would
+// be an unsynchronized read against every JOIN in the room. See
+// roomClientsSeatedAs. And the write goes through Client.WriteJSON, never
+// client.Conn.WriteJSON, because a Broadcast on another goroutine can be
+// inside this same conn's writer at this instant and gorilla permits exactly
+// one.
+//
+// Same empty-notification guard as Broadcast: every message sent here carries
+// a notification the recipient toasts, and an arm that forgot to set one
+// should be dropped loudly in the log rather than toasted blank.
+//
+// Zero reached is not an error. The recipient may be offline; the offer is in
+// Mongo and their inbox fetches it when they are back. Callers log the count.
+func (rm *RoomManager) SendTo(room, playerID string, message Message) int {
+	if playerID == "" {
+		// Every connection carries PlayerID "" from the upgrade until its JOIN
+		// succeeds, so matching on it would send a private message to every
+		// unseated conn in the room. There is no player whose id is the empty
+		// string. Same guard, same reason, as CloseClientByPlayerID.
+		return 0
+	}
+	if empty, hasField := emptyNotification(message.Payload); hasField && empty {
+		log.Printf("SendTo refused for room %s: %s payload has an empty or non-string notification", room, message.Type)
+		return 0
+	}
+
+	var dead []*Client
+	reached := 0
+
+	for _, client := range rm.roomClientsSeatedAs(room, playerID) {
+		if err := client.WriteJSON(message); err != nil {
+			client.Conn.Close()
+			dead = append(dead, client)
+			continue
+		}
+		reached++
+	}
+
+	if len(dead) == 0 {
+		return reached
+	}
+
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	if clients, ok := rm.clients[room]; ok {
+		for _, client := range dead {
+			delete(clients, client)
+		}
+	}
+	return reached
 }
 
 // CloseClientByPlayerID force-closes every live connection in room that is
@@ -2063,7 +2212,15 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 // rather than a stylistic one - see the kick arm's comment.
 func eventTypeFor(notification string) []string {
 	switch {
-	// First, deliberately. This notification has "Banker" as its subject, so
+	// A settled trade, before every other arm. tradeNotification (offers.go)
+	// names two players and up to 28 deeds, and a name like "Warehouse" or a
+	// deed like "Park Place" would otherwise be matched by a substring key
+	// further down ("house", "sent") and drawn as something it is not. "traded"
+	// is the one word every arm of that copy carries; if the copy changes, this
+	// key changes with it - TestTradeRowsTakeTheTradeIcon is the guard.
+	case strings.Contains(notification, " traded "):
+		return []string{"#0ea5e9", "🤝"}
+	// Next, deliberately. This notification has "Banker" as its subject, so
 	// left further down it would fall into the bank arm by substring and be
 	// drawn identically to a balance change - which is the outcome
 	// PLAN.md's icon dial exists to avoid. "removed" alone is not a safe key
