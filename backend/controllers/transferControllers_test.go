@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/zachmshort/emoney-backend/models"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // The first tests in this package. They reach exactly one thing -
@@ -13,13 +14,19 @@ import (
 // running. Nothing here proves a valid transfer moves the right money; it
 // proves an invalid one is refused before it can. See HANDOFF 4 for the
 // boundary this sits on.
+//
+// active and removed each mint a fresh ObjectID per call (rather than leaving
+// ID at its zero value) so that two fixtures built for an ordinary two-party
+// test are never accidentally "the same player" under the from.ID == to.ID
+// self-transfer check below. A test that means to construct a self-transfer
+// does so explicitly, by reusing one fixture as both from and to.
 
 func active(balance int) models.Player {
-	return models.Player{IsActive: true, Balance: balance}
+	return models.Player{ID: primitive.NewObjectID(), IsActive: true, Balance: balance}
 }
 
 func removed(balance int) models.Player {
-	return models.Player{IsActive: false, Balance: balance}
+	return models.Player{ID: primitive.NewObjectID(), IsActive: false, Balance: balance}
 }
 
 func TestTransferRejectionAcceptsAnAffordableSend(t *testing.T) {
@@ -62,6 +69,18 @@ func TestTransferRejectionRefusesZero(t *testing.T) {
 	wantRejection(t, err, "a transfer has to be at least $1")
 }
 
+func TestTransferRejectionRefusesASelfTransfer(t *testing.T) {
+	// A SEND where fromPlayerId == toPlayerId nets to zero money movement -
+	// same defect class as an already-closed bug in this repo, "refuse to
+	// broadcast a notification nobody wrote." Every other rule would pass:
+	// the player is active, is paying themself, and can obviously "afford"
+	// their own money.
+	self := active(500)
+	err := transferRejection(self, self, 100)
+
+	wantRejection(t, err, "you can't send money to yourself")
+}
+
 func TestTransferRejectionRefusesARemovedSender(t *testing.T) {
 	// Board row 16, decided 2026-09-17: a removed player may not move money.
 	err := transferRejection(removed(500), active(0), 100)
@@ -99,6 +118,29 @@ func TestTransferRejectionReportsTheRemovalBeforeTheBalance(t *testing.T) {
 	err := transferRejection(removed(0), active(0), 100)
 
 	wantRejection(t, err, "a removed player cannot send money")
+}
+
+func TestTransferRejectionReportsTheAmountBeforeASelfTransfer(t *testing.T) {
+	// Same reasoning as ...ReportsTheAmountBeforeTheSender: the amount floor
+	// is the first thing checked, full stop, so a self-transfer with a bad
+	// amount is still told about the amount first.
+	self := active(500)
+	err := transferRejection(self, self, -100)
+
+	wantRejection(t, err, "a transfer has to be at least $1")
+}
+
+func TestTransferRejectionReportsASelfTransferBeforeTheSenderIsActive(t *testing.T) {
+	// A player who is both removed and paying themself hears about the
+	// self-transfer, not the removal - self-transfer is placed ahead of both
+	// IsActive checks because "you can't pay yourself" is true regardless of
+	// whether either flag is frozen. Swap the two and a frozen player who
+	// taps their own name gets told they're frozen, which is technically true
+	// but not why the transfer is nonsense.
+	self := removed(500)
+	err := transferRejection(self, self, 100)
+
+	wantRejection(t, err, "you can't send money to yourself")
 }
 
 func wantRejection(t *testing.T, err error, want string) {

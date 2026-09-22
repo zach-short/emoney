@@ -21,8 +21,9 @@ type Transfer = models.Transfer
 // machine can reach. Pure, so every rule here has a test.
 //
 // The order is the order a player would want to hear about a problem: whether
-// they may send at all, whether the person they are paying is still in the
-// game, and only then whether they can afford it.
+// the amount itself is legal, whether they are just paying themselves,
+// whether they may send at all, whether the person they are paying is still
+// in the game, and only then whether they can afford it.
 func transferRejection(from, to models.Player, amount int) error {
 	if amount < 1 {
 		// handleTransfer rejects this before PlayerTransfer is ever called, and
@@ -31,6 +32,17 @@ func transferRejection(from, to models.Player, amount int) error {
 		// their sign from the direction, so a negative amount runs the whole
 		// transfer backwards and pays the sender out of the recipient.
 		return errors.New("a transfer has to be at least $1")
+	}
+	if from.ID == to.ID {
+		// A SEND to yourself nets to zero - the $inc below debits and credits
+		// the same balance by the same amount - but every rule below it would
+		// still pass: you are trivially active, real, and able to "afford" your
+		// own money. Placed here, before either IsActive check, because a
+		// self-transfer is knowable the instant both IDs are read and is true
+		// regardless of whether either flag happens to be frozen; it would be
+		// strange to tell a frozen player they can't pay themselves because
+		// they're frozen; when the real reason is that it's themselves.
+		return errors.New("you can't send money to yourself")
 	}
 	if !from.IsActive {
 		// Board row 16, decided 2026-09-17: a removed player may not move
