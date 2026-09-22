@@ -84,6 +84,12 @@ export const roomApi = {
     apiRequest("get", `${ROOM(code)}/properties`),
   checkExistingRoom: (code: string) =>
     apiRequest("get", `${ROOM(code)}/exists`),
+  // The inbox read: every PENDING offer this player made or was made to
+  // (`controllers.GetPendingOffers`). Fetched on mount and again on every
+  // websocket message, so a reload mid-offer and a dropped frame both find
+  // the offer where it lives, in Mongo.
+  getOffers: (code: string, playerId: string) =>
+    apiRequest("get", `${ROOM(code)}/offers`, undefined, { playerId }),
 };
 
 export const playerApi = {

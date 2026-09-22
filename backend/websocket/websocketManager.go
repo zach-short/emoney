@@ -144,6 +144,83 @@ func (rm *RoomManager) Broadcast(room string, message Message) {
 	}
 }
 
+// SendTo writes message to every live connection in room that is seated as
+// playerID, and reports how many it reached. It is the targeted counterpart of
+// Broadcast, and it exists because an offer is not room news: a trade proposal
+// goes to the one player it was made to, and the sender gets their own
+// confirmation, while everyone else in the room sees nothing until the trade
+// settles.
+//
+// A player with two tabs open has two *Clients with the same PlayerID, and
+// this sends to all of them. Decided here rather than left to fall out of the
+// loop: the alternative - first match wins - would put the offer on whichever
+// tab happened to be first in map iteration order, which is random in Go, so
+// a player looking at the other tab would see nothing arrive and the toast
+// would fire on a screen nobody was reading. Every tab is the same person and
+// every tab refetches the inbox on its next message anyway; the cost of
+// sending to all of them is one extra frame.
+//
+// The lock discipline is Broadcast's, exactly, and for the same reason: dead
+// clients are collected under RLock and deleted under the write lock, because
+// two RLock holders deleting from one Go map is fatal("concurrent map
+// writes"), which is not a panic, so Gin's Recovery does not catch it and the
+// single backend process dies. Reading client.PlayerID under RLock from this
+// goroutine is the case invariant 7 (HANDOFF.md) permits: it is written only
+// through SeatClient under the write lock. And the write goes through
+// Client.WriteJSON, never client.Conn.WriteJSON, because a Broadcast on another
+// goroutine can be inside this same conn's writer at this instant and gorilla
+// permits exactly one.
+//
+// Same empty-notification guard as Broadcast: every message sent here carries
+// a notification the recipient toasts, and an arm that forgot to set one
+// should be dropped loudly in the log rather than toasted blank.
+//
+// Zero reached is not an error. The recipient may be offline; the offer is in
+// Mongo and their inbox fetches it when they are back. Callers log the count.
+func (rm *RoomManager) SendTo(room, playerID string, message Message) int {
+	if playerID == "" {
+		// Every connection carries PlayerID "" from the upgrade until its JOIN
+		// succeeds, so matching on it would send a private message to every
+		// unseated conn in the room. There is no player whose id is the empty
+		// string. Same guard, same reason, as CloseClientByPlayerID.
+		return 0
+	}
+	if empty, hasField := emptyNotification(message.Payload); hasField && empty {
+		log.Printf("SendTo refused for room %s: %s payload has an empty or non-string notification", room, message.Type)
+		return 0
+	}
+
+	var dead []*Client
+	reached := 0
+
+	rm.mu.RLock()
+	for client := range rm.clients[room] {
+		if client.PlayerID != playerID {
+			continue
+		}
+		if err := client.WriteJSON(message); err != nil {
+			client.Conn.Close()
+			dead = append(dead, client)
+			continue
+		}
+		reached++
+	}
+	rm.mu.RUnlock()
+
+	if len(dead) == 0 {
+		return reached
+	}
+
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+	if clients, ok := rm.clients[room]; ok {
+		for _, client := range dead {
+			delete(clients, client)
+		}
+	}
+	return reached
+}
+
 // CloseClientByPlayerID force-closes every live connection in room that is
 // seated as playerID, and reports how many it closed. It is what makes a kick
 // actually remove someone: the kicked browser reconnects a second after any
@@ -2063,7 +2140,15 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 // rather than a stylistic one - see the kick arm's comment.
 func eventTypeFor(notification string) []string {
 	switch {
-	// First, deliberately. This notification has "Banker" as its subject, so
+	// A settled trade, before every other arm. tradeNotification (offers.go)
+	// names two players and up to 28 deeds, and a name like "Warehouse" or a
+	// deed like "Park Place" would otherwise be matched by a substring key
+	// further down ("house", "sent") and drawn as something it is not. "traded"
+	// is the one word every arm of that copy carries; if the copy changes, this
+	// key changes with it - TestTradeRowsTakeTheTradeIcon is the guard.
+	case strings.Contains(notification, " traded "):
+		return []string{"#0ea5e9", "🤝"}
+	// Next, deliberately. This notification has "Banker" as its subject, so
 	// left further down it would fall into the bank arm by substring and be
 	// drawn identically to a balance change - which is the outcome
 	// PLAN.md's icon dial exists to avoid. "removed" alone is not a safe key

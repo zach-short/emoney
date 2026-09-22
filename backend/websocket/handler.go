@@ -202,6 +202,28 @@ func HandleWebSocket(c *gin.Context) {
 					Payload: err.Error(),
 				})
 			}
+		// The two trade cases (offers.go). Their successes are the first
+		// messages in this package that go to one player rather than the
+		// room - RoomManager.SendTo - and their ERROR replies go back on the
+		// sender's own conn like every case above. For RESPOND_OFFER that
+		// reply carries the sentence that makes a refused accept make sense:
+		// "Alice doesn't own Baltic Avenue" is the whole of what a player
+		// learns when two offers named the same deed and the other one
+		// settled first.
+		case "CREATE_OFFER":
+			if err := Manager.handleCreateOffer(client, message); err != nil {
+				client.WriteJSON(Message{
+					Type:    "ERROR",
+					Payload: err.Error(),
+				})
+			}
+		case "RESPOND_OFFER":
+			if err := Manager.handleRespondOffer(client, message); err != nil {
+				client.WriteJSON(Message{
+					Type:    "ERROR",
+					Payload: err.Error(),
+				})
+			}
 		}
 	}
 }

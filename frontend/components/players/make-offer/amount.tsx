@@ -76,10 +76,14 @@ const Amount = ({
           `}
             onClick={() => {
               setPercent(num);
+              // Floored: 10% of $1,555 is $155.50, and the Go side refuses a
+              // fraction rather than truncating it (`parseTradeSide`), so an
+              // unfloored percent would make the Send button send nothing.
+              const share = Math.floor((balance * num) / 100);
               if (type === "offer") {
-                updateOffer("offer", { amount: (balance * num) / 100 });
+                updateOffer("offer", { amount: share });
               } else {
-                updateOffer("request", { amount: (balance * num) / 100 });
+                updateOffer("request", { amount: share });
               }
             }}
           >

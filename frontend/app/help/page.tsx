@@ -31,8 +31,12 @@ const HelpPage = () => {
     {
       value: "item-4",
       title: "Can I trade directly with other players?",
+      // True since 2026-09-17 (board row 18); before that the screen behind
+      // this sentence had no Send button. The banker is not in the loop of a
+      // trade at all, which is what the old "only steps in when necessary"
+      // half was read as promising.
       description:
-        "Yes. E-Money supports peer-to-peer trades for both properties and funds. The banker only steps in when necessary.",
+        "Yes. Tap another player's name to make them an offer - cash, properties, or both, in either direction - and add a note for anything else you're agreeing to between you. They can accept, decline or counter. The banker isn't part of a trade; if one goes wrong, they put it right by hand.",
     },
     {
       value: "item-5",

@@ -5,7 +5,9 @@ export type WebSocketPayload =
   | BankerTransactionPayload
   | ManagePropertiesPayload
   | FreeParkingPayload
-  | KickPlayerPayload;
+  | KickPlayerPayload
+  | CreateOfferPayload
+  | RespondOfferPayload;
 
 export type TransferType =
   | "SEND"
@@ -86,4 +88,36 @@ export interface PurchasePropertyPayload {
   buyerId: string;
   price: number;
   roomId: string;
+}
+
+// A trade proposal, read by `handleCreateOffer` in
+// `backend/websocket/offers.go`. Amounts are JSON numbers in whole dollars, like
+// a bid; the Go side refuses a fraction rather than truncating it. Either side
+// may be empty but not both, and `note` is capped at 280 characters there and in
+// the form's `maxLength` - the two numbers are kept equal by hand.
+//
+// A counter is this same message with `counterOf` set to the id of the offer it
+// answers: the Go side marks that one COUNTERED in the same transaction as it
+// stores this one. There is no COUNTER response - see `RespondOfferPayload`.
+export interface CreateOfferPayload {
+  type: "CREATE_OFFER";
+  roomId: string;
+  fromPlayerId: string;
+  toPlayerId: string;
+  offer: { properties: string[]; amount: number };
+  request: { properties: string[]; amount: number };
+  note: string;
+  counterOf?: string;
+}
+
+// The answer to a pending offer, read by `handleRespondOffer`. ACCEPT and DENY
+// are the recipient's; WITHDRAW is the sender taking their own offer back, and
+// the Go side refuses each from the wrong player. ACCEPT settles the trade in
+// one transaction and is the only response that moves anything.
+export interface RespondOfferPayload {
+  type: "RESPOND_OFFER";
+  roomId: string;
+  offerId: string;
+  playerId: string;
+  response: "ACCEPT" | "DENY" | "WITHDRAW";
 }

@@ -64,16 +64,28 @@ export type EventHistory = {
 //   count: number;
 // }
 
-type Trade = {
+// One half of a trade: what one player hands over. Mirrors `TradeSide` in
+// `backend/models/offerModel.go` field for field; the Go side always sends both
+// keys, `properties` as an array of property ids (never null) and `amount` in
+// whole dollars.
+export type Trade = {
   properties?: string[];
   amount?: number;
   // immunity?: Immunity[];
 };
 
+export type OfferStatus = "PENDING" | "DENIED" | "ACCEPTED" | "COUNTERED";
+
+// Mirrors `Offer` in `backend/models/offerModel.go`. `note` is free text on
+// purpose: this app has no turns and no board position, so a deal like
+// "immunity on the browns for three turns" cannot be enforced under any
+// design, and the note is a handshake the app writes down rather than a rule
+// it applies. The commented-out `Immunity` above is the structured version
+// that was started and stopped, and it stays stopped (HANDOFF 26).
 export type Offer = {
   id: string;
   roomId: string;
-  status: "PENDING" | "DENIED" | "ACCEPTED" | "COUNTERED";
+  status: OfferStatus;
   fromPlayerId: string;
   toPlayerId: string;
   offer: Trade;
@@ -81,16 +93,9 @@ export type Offer = {
   createdAt: Date;
   updatedAt: Date;
   note?: string;
+  // The offer this one answers when it is a counter. The Go side sends null
+  // for a fresh offer; the form leaves it undefined and the payload drops it.
+  counterOf?: string | null;
 };
 
-export type OfferNoID = {
-  roomId: string;
-  status: "PENDING" | "DENIED" | "ACCEPTED" | "COUNTERED";
-  fromPlayerId: string;
-  toPlayerId: string;
-  offer: Trade;
-  request: Trade;
-  createdAt: Date;
-  updatedAt: Date;
-  note?: string;
-};
+export type OfferNoID = Omit<Offer, "id">;

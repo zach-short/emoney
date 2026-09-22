@@ -8,6 +8,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/zachmshort/emoney-backend/config"
+	"github.com/zachmshort/emoney-backend/controllers"
 	"github.com/zachmshort/emoney-backend/routes"
 )
 
@@ -32,6 +33,12 @@ func main() {
 	}))
 
 	config.ConnectDB()
+	// Logged, not fatal: the offer routes work without their indexes, only
+	// slower, and a startup that dies on an index error takes every room
+	// with it on the one process this app runs (HANDOFF.md invariant 1).
+	if err := controllers.EnsureOfferIndexes(); err != nil {
+		log.Printf("Failed to create the Offer indexes: %v", err)
+	}
 	routes.Routes(r)
 
 	port := os.Getenv("PORT")
