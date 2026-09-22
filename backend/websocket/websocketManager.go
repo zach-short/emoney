@@ -592,25 +592,19 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	return nil
 }
 
-// propertyPurchaseRejection is board row 16's decision at a purchase from the
-// Bank. The buyer is the actor - they are spending their own balance on a deed
-// - so this is the same "a frozen player may not act" half of the rule as
-// freeParkingRejection and managePropertiesRejection, and not the banker
-// question that bankTransactionRejection answers.
+// The purchase rules - the frozen buyer, the price floor, the deed still being
+// for sale and the buyer being able to afford it - are
+// controllers.propertyPurchaseRejection, and they used to be a
+// propertyPurchaseRejection here that refused the frozen buyer and nothing
+// else. They moved on 2026-09-22, when PurchaseProperty became a transaction
+// that reads the buyer and the deed inside itself: a rule that decides from
+// those values has to be callable from there, and this package cannot be
+// imported by controllers. Their tests moved with them, to
+// controllers/propertyControllers_test.go.
 //
-// It refuses the frozen buyer and nothing else, deliberately. This handler has
-// no balance floor and no price floor of any kind: controllers.PurchaseProperty
-// is two bare writes with no session and no read, and the price arrives as a
-// payload float, so a negative price credits the buyer AND hands them the deed.
-// That is a real hole of the same family as board rows 13, 14 and 15, and it is
-// raised as its own row rather than folded in here, where it would hide in this
-// diff and in its review.
-func propertyPurchaseRejection(buyer models.Player) error {
-	if !buyer.IsActive {
-		return errors.New("a removed player cannot buy property")
-	}
-	return nil
-}
+// What stayed here is the price floor below, which is a fact about the payload
+// rather than about any document - the same split freeParkingRejection's
+// comment describes, and the same placement handleTransfer's amount floor has.
 
 func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) error {
 	payload, ok := message.Payload.(map[string]interface{})
@@ -623,6 +617,29 @@ func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) e
 		return fmt.Errorf("invalid price format")
 	}
 	price := int(priceFloat)
+	if price < 1 {
+		// The price arrives as a bare JSON number and, until this line, nothing
+		// anywhere looked at it: controllers.PurchaseProperty $inc'd the balance
+		// by -price with no read and no check, so a price of -1000 CREDITED the
+		// buyer $1000 and handed them the deed in the same frame. Every route
+		// here is unauthenticated, so the only credential between a room and that
+		// frame is the room code.
+		//
+		// Rejected here rather than only in the controller for the same reason
+		// the transfer and free parking floors are: it is a fact about the
+		// payload, independent of any state, so it costs no round trip and stays
+		// reachable from a test (config.DB is nil in a test binary, so anything
+		// past the first database call panics instead of erroring).
+		// propertyPurchaseRejection keeps its own copy anyway, because the floor
+		// belongs to the money write and PurchaseProperty is exported.
+		//
+		// int(priceFloat) truncates toward zero, so a fractional price under a
+		// dollar arrives here as 0 and is refused with the negatives rather than
+		// buying a deed for nothing. $0 is refused on its own account too: it
+		// moves no money, but it still writes an event-history row and toasts the
+		// whole room about a purchase that cost nothing.
+		return errors.New("a property purchase has to be at least $1")
+	}
 
 	buyerIdStr, ok := payload["buyerId"].(string)
 	if !ok {
@@ -643,19 +660,18 @@ func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) e
 		log.Printf("Invalid propertyId error: %v", err)
 		return fmt.Errorf("invalid propertyId: %w", err)
 	}
-	property, buyer, err := controllers.GetPropertyAndBuyer(propertyID, buyerID)
+	// --- the first database call. Nothing below here is reachable from a test
+	// on a machine with no Mongo; it panics on the nil config.DB instead. ---
+	//
+	// One call, not a read and then a write: the read of the deed and the buyer
+	// now happens inside PurchaseProperty's transaction, where the rules decide
+	// from the same snapshot the writes land on. It hands back what it read so
+	// the notification below names the buyer and the property without a second
+	// round trip into the state this purchase just changed.
+	property, buyer, err := controllers.PurchaseProperty(propertyID, buyerID, price)
 	if err != nil {
-		log.Printf("Failed to get property or buyer details: %v", err)
+		log.Printf("Property purchase failed: %v", err)
 		return err
-	}
-	if err := propertyPurchaseRejection(*buyer); err != nil {
-		return err
-	}
-
-	purchaseErr := controllers.PurchaseProperty(propertyID, buyerID, price)
-	if purchaseErr != nil {
-		log.Printf("Property update failed: %v", purchaseErr)
-		return purchaseErr
 	}
 
 	notification := fmt.Sprintf("%s purchased %s from the Bank", buyer.Name, property.Name)
@@ -793,7 +809,9 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 // The player named in the payload is the actor - they are mortgaging,
 // unmortgaging, developing or selling development on their own deeds - so this
 // is the same "a frozen player may not act" half of the rule as
-// freeParkingRejection and propertyPurchaseRejection.
+// freeParkingRejection and controllers.propertyPurchaseRejection (which lived
+// in this file as propertyPurchaseRejection until 2026-09-22 - see the note
+// above handlePropertyPurchase for where it went and why).
 //
 // Nothing here looks at the amount, and that is deliberate rather than an
 // omission. handleManageProperties treats a negative amount as MEANINGFUL: it
@@ -1151,9 +1169,10 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 
 	notification := kickNotification(target.Name, disposition, successor.Name, len(lots))
 
-	// One transaction, following freeParking above - the only other
-	// multi-document write in this app - and deliberately not
-	// controllers.PurchaseProperty, which is two bare writes with no session.
+	// One transaction, following freeParking above. controllers.PurchaseProperty
+	// was the counter-example this comment named until 2026-09-22 - two bare
+	// writes with no session - and it is transacted itself now, for the reason
+	// the next sentence gives in its own terms.
 	// A kick that demotes the old banker and then fails to promote the new one
 	// leaves the room bankerless; one that promotes and fails to demote leaves
 	// two bankers. Neither half may land alone.
@@ -1759,10 +1778,12 @@ func (rm *RoomManager) handlePlaceBid(client *Client, message Message) error {
 // it, and advances to the next deed or ends the auction (D14, D16).
 //
 // The settlement is one session.WithTransaction, following freeParking and
-// handleKickPlayer and deliberately not controllers.PurchaseProperty, which is
-// two bare writes with no session and no floor. A close that hands over the
-// deed and then fails to charge the winner is a free property; one that charges
-// and fails to hand over is money for nothing. Neither half may land alone.
+// handleKickPlayer. controllers.PurchaseProperty was the counter-example here
+// until 2026-09-22 - two bare writes with no session and no floor - and it is
+// transacted and floored itself now, for exactly the reason that follows. A
+// close that hands over the deed and then fails to charge the winner is a free
+// property; one that charges and fails to hand over is money for nothing.
+// Neither half may land alone.
 func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error {
 	payload, ok := message.Payload.(map[string]interface{})
 	if !ok {
