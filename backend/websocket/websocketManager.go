@@ -714,6 +714,36 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 	if err != nil {
 		return fmt.Errorf("invalid amount: %w", err)
 	}
+	if amount < 1 {
+		// strconv.Atoi parses "-100", and the direction actually applied comes
+		// from transactionType (BANKER_ADD/BANKER_REMOVE), not from amount's
+		// sign - isAdd is decided separately below, and
+		// controllers.UpdatePlayerBalanceByBanker builds its one $inc from
+		// isAdd rather than from amount's sign. So a negative amount silently
+		// reverses the real effect while the notification text below (built
+		// from action/preposition, which only depend on isAdd) keeps
+		// describing transactionType's direction - a banker who fat-fingers a
+		// minus sign gets a notification that lies about which way the money
+		// moved.
+		//
+		// Same floor, same reasoning and same placement as handleTransfer's
+		// amount < 1 check above (:243-268): a fact about the payload,
+		// independent of any state, so it costs no round trip and stays
+		// reachable from a test (config.DB is nil in a test binary, so
+		// anything past controllers.GetPlayer below panics instead of
+		// erroring).
+		//
+		// $0 is refused with the negatives, same as transfer, free parking and
+		// a bid: it moves nothing, but it still writes an event-history row
+		// and toasts the whole room about money that did not go anywhere.
+		//
+		// Kept out of bankTransactionRejection deliberately, following
+		// freeParkingRejection's reasoning rather than transferRejection's:
+		// bankTransactionRejection only ever checks target.IsActive, which
+		// needs the player read first, while this floor needs nothing but the
+		// payload and belongs above that first database call.
+		return errors.New("a bank transaction has to be at least $1")
+	}
 
 	toPlayerIdStr, ok := payload["toPlayerId"].(string)
 	if !ok {
