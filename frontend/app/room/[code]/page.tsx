@@ -1,5 +1,12 @@
 "use client";
-import { EventHistory, Player, Property, Room } from "@/types/schema";
+import {
+  EventHistory,
+  Offer,
+  OfferNoID,
+  Player,
+  Property,
+  Room,
+} from "@/types/schema";
 import { use, useEffect, useEffectEvent, useRef, useState } from "react";
 import RoomView from "@/components/room/room.client";
 import { getWsUrl } from "@/lib/utils/wsHelpers";
@@ -7,7 +14,11 @@ import { playerStore } from "@/lib/utils/playerHelpers";
 import { toast } from "sonner";
 import { josephinBold } from "@/components/ui/fonts";
 import { sendMessage } from "@/lib/utils/sendWsMessage";
-import { KickPlayerPayload, ManagePropertiesPayload } from "@/types/payloads";
+import {
+  KickPlayerPayload,
+  ManagePropertiesPayload,
+  RespondOfferPayload,
+} from "@/types/payloads";
 import { usePublicFetch } from "@/hooks/use-public-fetch";
 import { roomApi } from "@/lib/utils/api.service";
 import DataState from "@/components/containers/data-state";
@@ -57,6 +68,20 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     },
   );
 
+  // The inbox: every PENDING offer this player made or was made to. Its own
+  // fetch rather than a field on the players payload, because that payload
+  // goes to every client in the room and an offer is not room news. Fetched
+  // on mount -- an offer lives in Mongo so a reload mid-offer finds it --
+  // and refetched on every websocket message below, so a dropped
+  // OFFER_RECEIVED frame is caught by the next frame of any kind.
+  const { data: offersData, refetch: refetchOffers } = usePublicFetch<{
+    offers: Offer[];
+  }>(roomApi.getOffers, {
+    resourceParams: [code, storedPlayerId],
+    dependencies: [code, storedPlayerId],
+    enabled: !!code && !!storedPlayerId,
+  });
+
   // Straight projections of the fetched room payload -- no effect needed, and
   // this keeps the players, room and history from lagging a render behind the
   // data that produced them.
@@ -66,6 +91,48 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     playersData?.players?.filter((p: Player) => p.id !== storedPlayerId) || [];
   const room: Room | undefined = playersData?.room;
   const eventHistory: EventHistory[] = playersData?.eventHistory || [];
+  const offers: Offer[] = offersData?.offers || [];
+
+  const handleCreateOffer = (offer: OfferNoID) => {
+    if (!player?.id || !room?.id) return;
+
+    // Whole dollars, floored: the percent buttons in `make-offer/amount.tsx`
+    // floor too, but the Go side refuses a fraction outright rather than
+    // truncating (`parseTradeSide`), so the floor here is the last word.
+    // `counterOf` left undefined is dropped by JSON.stringify, which the Go
+    // side reads as a fresh offer.
+    sendMessage(ws.current, "CREATE_OFFER", {
+      type: "CREATE_OFFER",
+      roomId: room.id,
+      fromPlayerId: offer.fromPlayerId,
+      toPlayerId: offer.toPlayerId,
+      offer: {
+        properties: offer.offer.properties ?? [],
+        amount: Math.floor(offer.offer.amount ?? 0),
+      },
+      request: {
+        properties: offer.request.properties ?? [],
+        amount: Math.floor(offer.request.amount ?? 0),
+      },
+      note: offer.note ?? "",
+      counterOf: offer.counterOf ?? undefined,
+    });
+  };
+
+  const handleRespondOffer = (
+    offerId: string,
+    response: RespondOfferPayload["response"],
+  ) => {
+    if (!player?.id || !room?.id) return;
+
+    sendMessage(ws.current, "RESPOND_OFFER", {
+      type: "RESPOND_OFFER",
+      roomId: room.id,
+      offerId,
+      playerId: player.id,
+      response,
+    });
+  };
 
   const handleBankerTransaction = (
     amount: string,
@@ -144,7 +211,20 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
         className: `${josephinBold.className} text-xs text-center`,
       });
 
-      refetchPlayers();
+      // Every frame refetches the inbox, not only the offer ones: that is
+      // what makes a dropped OFFER_RECEIVED recoverable, and the reconnect's
+      // own JOIN broadcast covers a socket that was down when it was sent.
+      refetchOffers();
+
+      // The three private offer frames move no money and change no card, so
+      // the room read is skipped for them; everything else refetches it.
+      if (
+        !["OFFER_RECEIVED", "OFFER_SENT", "OFFER_RESOLVED"].includes(
+          message.type,
+        )
+      ) {
+        refetchPlayers();
+      }
 
       // PLAYER_KICKED belongs here because a `BANK` disposition clears
       // `playerId` on the target's deeds, and `GetAvailableProperties` is the
@@ -316,6 +396,9 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
             onBankerTransaction={handleBankerTransaction}
             onManageProperties={handleManageProperties}
             onKickPlayer={handleKickPlayer}
+            offers={offers}
+            onCreateOffer={handleCreateOffer}
+            onRespondOffer={handleRespondOffer}
           />
         )
       }
@@ -344,6 +427,13 @@ const getIconForType = (type: string) => {
     // the event log show the player the same symbol.
     case "PLAYER_KICKED":
       return "🚫";
+    // The four trade frames share the pair `eventTypeFor` stores on a settled
+    // trade's history row, so the toast and the log agree.
+    case "OFFER_RECEIVED":
+    case "OFFER_SENT":
+    case "OFFER_RESOLVED":
+    case "OFFER_ACCEPTED":
+      return "🤝";
     default:
       return "ℹ️";
   }

@@ -1,10 +1,24 @@
 "use client";
 
 import PlayerCard from "@/components/players/player-card";
-import { EventHistory, Player, Property, Room } from "@/types/schema";
+import {
+  EventHistory,
+  Offer,
+  OfferNoID,
+  Player,
+  Property,
+  Room,
+} from "@/types/schema";
 import Navbar from "../navbar/navbar";
 import { josephinBold } from "../ui/fonts";
-import { BankerTransactionPayload, FreeParkingPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import {
+  BankerTransactionPayload,
+  FreeParkingPayload,
+  KickPlayerPayload,
+  ManagePropertiesPayload,
+  RespondOfferPayload,
+  TransferType,
+} from "@/types/payloads";
 
 const RoomView = ({
   currentPlayer,
@@ -18,6 +32,9 @@ const RoomView = ({
   onBankerTransaction,
   onManageProperties,
   onKickPlayer,
+  offers,
+  onCreateOffer,
+  onRespondOffer,
 }: {
   otherPlayers: Player[];
   eventHistory: EventHistory[];
@@ -60,6 +77,15 @@ const RoomView = ({
     targetPlayerId: string,
     disposition: KickPlayerPayload["disposition"],
     successorPlayerId?: string,
+  ) => void;
+  // The current player's pending offers, both directions, and the two sends.
+  // They go to every card: your own card's name opens the inbox, another
+  // player's opens the form to make them an offer.
+  offers: Offer[];
+  onCreateOffer: (offer: OfferNoID) => void;
+  onRespondOffer: (
+    offerId: string,
+    response: RespondOfferPayload["response"],
   ) => void;
 }) => {
   const allPlayers = [...otherPlayers, currentPlayer];
@@ -105,6 +131,9 @@ const RoomView = ({
               onBankerTransaction={onBankerTransaction}
               onManageProperties={onManageProperties}
               onKickPlayer={onKickPlayer}
+              offers={offers}
+              onCreateOffer={onCreateOffer}
+              onRespondOffer={onRespondOffer}
             />
           </div>
 
@@ -130,6 +159,9 @@ const RoomView = ({
                 roomId={room?.id}
                 onBankerTransaction={onBankerTransaction}
                 onKickPlayer={onKickPlayer}
+                offers={offers}
+                onCreateOffer={onCreateOffer}
+                onRespondOffer={onRespondOffer}
               />
             </div>
           ))}

@@ -1,8 +1,15 @@
 "use client";
-import { Player } from "@/types/schema";
+import { useState } from "react";
+import { Offer, OfferNoID, Player } from "@/types/schema";
 import { josephinBold } from "../ui/fonts";
 import { PlayerDetails } from "./player-card-content";
-import { BankerTransactionPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
+import {
+  BankerTransactionPayload,
+  KickPlayerPayload,
+  ManagePropertiesPayload,
+  RespondOfferPayload,
+  TransferType,
+} from "@/types/payloads";
 import {
   Drawer,
   DrawerContent,
@@ -10,6 +17,7 @@ import {
   DrawerTrigger,
 } from "../ui/drawer";
 import MakeOffer from "./make-offer/make-offer";
+import OffersInbox from "./make-offer/offers-inbox";
 
 const PlayerCard = ({
   player,
@@ -20,6 +28,9 @@ const PlayerCard = ({
   onBankerTransaction,
   onManageProperties,
   onKickPlayer,
+  offers,
+  onCreateOffer,
+  onRespondOffer,
 }: {
   player: Player;
   currentPlayer: Player;
@@ -51,32 +62,80 @@ const PlayerCard = ({
     disposition: KickPlayerPayload["disposition"],
     successorPlayerId?: string
   ) => void;
+  offers: Offer[];
+  onCreateOffer: (offer: OfferNoID) => void;
+  onRespondOffer: (
+    offerId: string,
+    response: RespondOfferPayload["response"]
+  ) => void;
 }) => {
   const color = player?.color || "#fff";
+
+  // The name bar opens one of two drawers. On another player's card it is
+  // the offer form, as it always was -- except that the form now has a Send
+  // button. On your own card it is your inbox: making an offer to yourself is
+  // nothing, and this is where the offers made to you have to be findable
+  // from, because a toast is gone in four seconds. Controlled so the form
+  // can close the drawer once it sends.
+  const [open, setOpen] = useState(false);
+  const isSelf = currentPlayer?.id === player?.id;
+  // Compared against `false` rather than negated, as `player-card-content.tsx`
+  // does, so a payload missing the field never disables a live player's bar.
+  const isRemoved = player?.isActive === false;
+  const waitingOnMe = offers.filter(
+    (o) => o.toPlayerId === currentPlayer?.id && o.status === "PENDING"
+  ).length;
 
   return (
     <>
       <div className="snap-center w-[360px] border bg-white border-black  aspect-[3/4] select-none relative">
         <div className={`p-3 w-full h-full border-black `}>
           <div className={`border border-black p-2 h-full`}>
-            <Drawer>
+            <Drawer open={open} onOpenChange={setOpen}>
               <DrawerTrigger asChild>
                 <button
+                  type="button"
                   style={{ backgroundColor: color }}
-                  className={`h-16 border-[1px] text-black ${josephinBold.className} text-center w-full border-black flex items-center justify-center text-3xl transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black`}
+                  // A removed player cannot be traded with -- the Go side
+                  // refuses it -- so their bar does not open the form.
+                  disabled={isRemoved && !isSelf}
+                  className={`h-16 border-[1px] text-black ${josephinBold.className} text-center w-full border-black flex items-center justify-center gap-x-3 text-3xl transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-default disabled:hover:brightness-100`}
                 >
-                  {player?.name}
+                  <span>{player?.name}</span>
+                  {isSelf && waitingOnMe > 0 && (
+                    <span
+                      className={`rounded-full bg-black px-3 py-1 text-base text-white`}
+                    >
+                      {waitingOnMe} {waitingOnMe === 1 ? "offer" : "offers"}
+                    </span>
+                  )}
                 </button>
               </DrawerTrigger>
               <DrawerContent
                 className={`overflow-y-auto min-h-[90vh] bg-black`}
               >
-                <DrawerTitle className={`hidden`}>Make an offer</DrawerTitle>
-                <MakeOffer
-                  player={player}
-                  currentPlayer={currentPlayer}
-                  roomId={roomId}
-                />
+                <DrawerTitle className={`hidden`}>
+                  {isSelf ? "Your offers" : "Make an offer"}
+                </DrawerTitle>
+                {isSelf ? (
+                  <OffersInbox
+                    offers={offers}
+                    currentPlayer={currentPlayer}
+                    allPlayers={allPlayers}
+                    roomId={roomId}
+                    onCreateOffer={onCreateOffer}
+                    onRespondOffer={onRespondOffer}
+                    onClose={() => setOpen(false)}
+                  />
+                ) : (
+                  <MakeOffer
+                    player={player}
+                    currentPlayer={currentPlayer}
+                    roomId={roomId}
+                    onCreateOffer={onCreateOffer}
+                    onSent={() => setOpen(false)}
+                  />
+                )}
               </DrawerContent>
             </Drawer>
 
