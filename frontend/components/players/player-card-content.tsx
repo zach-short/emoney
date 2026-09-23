@@ -8,7 +8,8 @@ import {
 import { useState } from "react";
 import SendReqToggle from "./pay-req-toggle-switch";
 import PayRequestRent from "./pay.req.rent.component";
-import { josephinBold, josephinNormal } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import PlayerTags from "./player-tags";
 import ManageProperties from "./manage-properties";
 import { BankerTransactionPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
@@ -115,14 +116,14 @@ const PlayerDetails = ({
   return (
     <>
       <div
-        className={`px-4 text-black flex flex-col items-evenly gap-y-2 justify-between ${josephinNormal.className} text-2xl`}
+        className={`px-4 text-black flex flex-col items-evenly gap-y-2 justify-between text-2xl`}
       >
         <Dialog
           open={dialogState !== null}
           onOpenChange={(open) => !open && setDialogState(null)}
         >
           <DialogContent
-            className={`sm:max-w-[425px] ${josephinBold.className} top-1/3`}
+            className={`sm:max-w-[425px] top-1/3`}
           >
             <DialogHeader>
               <DialogTitle>
@@ -149,7 +150,7 @@ const PlayerDetails = ({
           </DialogContent>
         </Dialog>
         <div
-          className={`${josephinBold.className} w-full absolute top-[6.5rem] right-1/2 transform translate-x-1/2`}
+          className={`w-full absolute top-[6.5rem] right-1/2 transform translate-x-1/2`}
         >
           <div className={`flex items-center justify-center space-x-5 w-full`}>
             {currentPlayer?.isBanker && !isRemoved && (
@@ -158,7 +159,10 @@ const PlayerDetails = ({
                 className={`hover:cursor-pointer pb-1`}
               />
             )}
-            <p> ${player?.balance || 0}</p>{" "}
+            {/* The headline number on the card, and the one Phase 5 animates.
+                Through the shared formatter and in the numeral face so it does
+                not reflow as it changes (DESIGN.md D3(a)). */}
+            <p className={numeralFace}>{formatMoney(player?.balance)}</p>{" "}
             {currentPlayer?.isBanker && !isRemoved && (
               <CiCirclePlus
                 onClick={() => setDialogState("add")}
@@ -174,7 +178,9 @@ const PlayerDetails = ({
               className={`flex items-center justify-between w-full mt-14 rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black`}
             >
               <span>{currentPlayer?.id === player?.id && "My"} Properties</span>
-              <span>{player?.properties?.length || 0}</span>
+              <span className={numeralFace}>
+                {player?.properties?.length || 0}
+              </span>
             </button>
           </DrawerTrigger>
           <DrawerContent
@@ -204,7 +210,7 @@ const PlayerDetails = ({
         )}
         {isRemoved && (
           <div
-            className={`w-[calc(100%-4rem)] text-center border border-neutral-400 text-neutral-500 rounded-full absolute bottom-6 p-4 right-1/2 transform translate-x-1/2 ${josephinBold.className}`}
+            className={`w-[calc(100%-4rem)] text-center border border-neutral-400 text-neutral-500 rounded-full absolute bottom-6 p-4 right-1/2 transform translate-x-1/2 font-semibold`}
           >
             No longer in the game
           </div>
@@ -214,7 +220,7 @@ const PlayerDetails = ({
             <DrawerTrigger asChild>
               <button
                 type="button"
-                className={`shadow-xl w-[calc(100%-4rem)] text-center border rounded-full absolute bottom-6 p-4 right-1/2 transform translate-x-1/2 transition-colors hover:bg-black hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black ${josephinBold.className}`}
+                className={`shadow-xl w-[calc(100%-4rem)] text-center border rounded-full absolute bottom-6 p-4 right-1/2 transform translate-x-1/2 transition-colors hover:bg-black hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black font-semibold`}
               >
                 Pay or Request
               </button>

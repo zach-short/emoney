@@ -1,6 +1,5 @@
 import NextLink, {LinkProps} from "next/link"
 
-import { josephinBold } from "./fonts";
 import { AnchorHTMLAttributes } from "react";
 
 type ButtonLinkProps = LinkProps &
@@ -17,7 +16,7 @@ const Link = ({
   return (
     <NextLink
       {...props}
-      className={`border  font rounded-lg px-4 py-5 border-yellow-200 w-64 text-2xl ${josephinBold.className} ${className}`}
+      className={`border  font rounded-lg px-4 py-5 border-yellow-200 w-64 text-2xl font-semibold ${className}`}
     >
       {children}
     </NextLink>

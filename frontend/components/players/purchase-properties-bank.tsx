@@ -1,7 +1,8 @@
 import { Player, Property } from "@/types/schema";
 import { useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
-import { josephinBold } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { toast } from "sonner";
 import { DrawerClose } from "../ui/drawer";
 import PropertyCard from "../property/cards/card";
@@ -28,7 +29,7 @@ const SelectColorProperties = ({
   if (!properties || properties.length === 0 || !player) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className={`text-xl ${josephinBold.className} text-white`}>
+        <p className={`text-xl font-semibold text-white`}>
           No Properties Found
         </p>
       </div>
@@ -95,7 +96,9 @@ const SelectColorProperties = ({
             <div className="bg-gray-800 rounded-lg p-4 space-y-2">
               <div className="flex justify-between items-center">
                 <span>Price:</span>
-                <span className="text-xl">${selectedProperty.price}</span>
+                <span className={`text-xl ${numeralFace}`}>
+                  {formatMoney(selectedProperty.price)}
+                </span>
               </div>
               <div className="text-sm opacity-80">{selectedProperty.name}</div>
             </div>
@@ -106,7 +109,9 @@ const SelectColorProperties = ({
             <div className="bg-gray-800 rounded-lg p-4">
               <div className="flex justify-between">
                 <span>{player.name}</span>
-                <span className="text-yellow-400">${newBalance}</span>
+                <span className={`text-yellow-400 ${numeralFace}`}>
+                  {formatMoney(newBalance)}
+                </span>
               </div>
             </div>
           </div>
@@ -125,7 +130,7 @@ const SelectColorProperties = ({
   };
 
   return (
-    <div className={`space-y-2 text-2xl  ${josephinBold.className}`}>
+    <div className={`space-y-2 text-2xl`}>
       {currentView === "confirmation" ? (
         renderConfirmationView()
       ) : currentView === "properties" ? (
@@ -149,7 +154,9 @@ const SelectColorProperties = ({
                     onClick={() => handlePropertySelect(property)}
                   />
                   <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-2 text-center">
-                    <span className="text-lg">${property?.price}</span>
+                    <span className={`text-lg ${numeralFace}`}>
+                      {formatMoney(property?.price)}
+                    </span>
                   </div>
                 </div>
               ))}

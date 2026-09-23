@@ -1,7 +1,8 @@
 import { Player, Property } from "@/types/schema";
 import { useEffect, useEffectEvent, useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
-import { josephinBold } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { calculateRent } from "../ui/helper-funcs";
 import { toast } from "sonner";
 import { DrawerClose } from "../ui/drawer";
@@ -84,7 +85,7 @@ const PayRequestRent = ({
   if (!properties || properties?.length === 0) {
     return (
       <div className="flex items-start justify-center h-full">
-        <p className={`text-sm ${josephinBold.className} text-white`}>
+        <p className={`text-sm font-semibold text-white`}>
           {type === "REQUEST"
             ? `You don't have any properties to request rent for`
             : `${toPlayer.name} doesn't have any properties to pay rent for`}
@@ -197,7 +198,7 @@ const PayRequestRent = ({
           {selectedGroup === "utility" && (
             <div className={`relative`}>
               <input
-                className={`w-24 pt-4 pl-1 border rounded text-black`}
+                className={`w-24 pt-4 pl-1 border rounded text-black ${numeralFace}`}
                 value={roll}
                 onChange={(e) => {
                   const inputValue = e.target.value;
@@ -234,8 +235,8 @@ const PayRequestRent = ({
             <div className="bg-gray-800 rounded-lg p-4 space-y-4">
               <div className="flex justify-between items-center">
                 <span>Amount:</span>
-                <span className="text-xl">
-                  ${transactionDetails?.amount || 0}
+                <span className={`text-xl ${numeralFace}`}>
+                  {formatMoney(transactionDetails?.amount)}
                 </span>
               </div>
               <div className="text-sm opacity-80">
@@ -249,14 +250,14 @@ const PayRequestRent = ({
             <div className="bg-gray-800 rounded-lg p-4 space-y-3">
               <div className="flex justify-between">
                 <span>{balances.payingPlayerName}</span>
-                <span className="text-red-400">
-                  ${balances?.payingBalance || fromPlayer.balance}
+                <span className={`text-red-400 ${numeralFace}`}>
+                  {formatMoney(balances?.payingBalance || fromPlayer.balance)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>{balances?.receivingPlayerName}</span>
-                <span className="text-green-400">
-                  ${balances?.receivingBalance || toPlayer.balance}
+                <span className={`text-green-400 ${numeralFace}`}>
+                  {formatMoney(balances?.receivingBalance || toPlayer.balance)}
                 </span>
               </div>
             </div>
@@ -276,7 +277,7 @@ const PayRequestRent = ({
   };
 
   return (
-    <div className={`space-y-4 text-2xl ml-2 mt-2 ${josephinBold.className}`}>
+    <div className={`space-y-4 text-2xl ml-2 mt-2`}>
       {currentView === "confirmation" ? (
         renderConfirmationView()
       ) : currentView === "properties" ? (

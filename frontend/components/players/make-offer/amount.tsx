@@ -1,4 +1,5 @@
-import { josephinBold } from "@/components/ui/fonts";
+import { numeralFace } from "@/components/ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { OfferNoID } from "@/types/schema";
 import { useState } from "react";
 import { FaDollarSign } from "react-icons/fa";
@@ -56,16 +57,19 @@ const Amount = ({
 
   return (
     <div className="flex flex-col gap-2">
-      <p className={`${josephinBold.className} text-xl mt-4`}>
+      <p className={`text-xl mt-4 font-semibold`}>
         {type === "offer" ? "Your" : `${name}'s`} balance:{" "}
-        {balance.toLocaleString()}
+        {/* Was `balance.toLocaleString()`, which rendered `1,500` against the
+            player card's `$1875` for the same number. Both now go through the
+            one formatter (DESIGN.md D3(a)). */}
+        <span className={numeralFace}>{formatMoney(balance)}</span>
       </p>
       <div className={`flex w-full items-center gap-x-3`}>
         {[10, 25, 50, 75, 100].map((num: number, index: number) => (
           <button
             key={index}
             className={`
-            border w-24 p-2 rounded-full
+            border w-24 p-2 rounded-full ${numeralFace}
             ${
               percent === num
                 ? type === "offer"
@@ -108,7 +112,7 @@ const Amount = ({
               e.preventDefault();
             }
           }}
-          className={`${josephinBold.className} bg-black text-white border rounded py-6 w-full pl-10 text-sm`}
+          className={`${numeralFace} bg-black text-white border rounded py-6 w-full pl-10 text-sm`}
         />
       </div>
     </div>

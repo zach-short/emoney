@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { josephinBold } from "../ui/fonts";
 type TransferType = "SEND" | "REQUEST";
 
 interface SendReqToggleProps {
@@ -17,7 +16,7 @@ const PayRequestRentToggleSwitch = ({ onToggle }: SendReqToggleProps) => {
 
   return (
     <button
-      className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-md ${josephinBold.className} mb-4`}
+      className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-md font-semibold mb-4`}
       onClick={handleToggle}
     >
       <div

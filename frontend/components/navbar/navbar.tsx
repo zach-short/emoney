@@ -8,7 +8,8 @@ import {
   DrawerTrigger,
 } from "../ui/drawer";
 import { AiOutlineMenu } from "react-icons/ai";
-import { josephinBold, josephinNormal } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import SelectColorProperties from "../players/purchase-properties-bank";
 import { useState } from "react";
 import Link from "next/link";
@@ -66,7 +67,7 @@ const Navbar = ({
           </button>
         </DrawerTrigger>
         <DrawerContent
-          className={`${josephinNormal.className} h-[80vh] border-[1px] px-3 text-xl `}
+          className={`h-[80vh] border-[1px] px-3 text-xl `}
         >
           <DrawerTitle className={`text-black`}>Menu</DrawerTitle>
 
@@ -83,7 +84,7 @@ const Navbar = ({
             {showProperties ? (
               <>
                 <div
-                  className={`${josephinBold.className} bg-black h-full  text-2xl overflow-y-auto`}
+                  className={`bg-black h-full  text-2xl overflow-y-auto font-semibold`}
                 >
                   <DrawerTitle className={`select-none text-black h-0`}>
                     Properties for Sale
@@ -110,7 +111,7 @@ const Navbar = ({
                   className={`event-history-container overflow-y-auto pb-20`}
                 >
                   {eventHistory.map((event: EventHistory, index: number) => (
-                    <div className={`${josephinNormal.className}`} key={index}>
+                    <div key={index}>
                       <div className="flex justify-between rounded-full items-center mb-2 py-1 sm:py-2">
                         <span className={`text-xs sm:text-sm`}>
                           <div className={`flex justify-start items-start`}>
@@ -145,7 +146,9 @@ const Navbar = ({
                     onClick={() => setShowProperties(true)}
                   >
                     <span>Bank&apos;s Properties</span>
-                    <span>{availableProperties?.length || 0}</span>
+                    <span className={numeralFace}>
+                      {availableProperties?.length || 0}
+                    </span>
                   </button>
                 </li>
                 <li>
@@ -155,7 +158,7 @@ const Navbar = ({
                     onClick={() => setShowFreeParking(true)}
                   >
                     <span>Free Parking</span>
-                    <span>${freeParking}</span>
+                    <span className={numeralFace}>{formatMoney(freeParking)}</span>
                   </button>
                 </li>
                 <li>
@@ -165,7 +168,7 @@ const Navbar = ({
                     onClick={() => setShowEvents(true)}
                   >
                     <span>Event History</span>
-                    <span>{eventHistory.length}</span>
+                    <span className={numeralFace}>{eventHistory.length}</span>
                   </button>
                 </li>
                 <li>
@@ -179,7 +182,7 @@ const Navbar = ({
                         toast.success("Room code copied to clipboard!", {
                           duration: 2000,
                           icon: "📋",
-                          className: `${josephinBold.className}`,
+                          className: `font-semibold`,
                         });
                       })
                       .catch(() => {
@@ -190,7 +193,7 @@ const Navbar = ({
                     <span>Room Code</span>
                     <span className={`flex items-center`}>
                       <IoCopyOutline className={`mr-1`} />
-                      {roomCode}
+                      <span className={numeralFace}>{roomCode}</span>
                     </span>
                   </button>
                 </li>

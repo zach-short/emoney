@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { sulpherBold } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
 import { getButtonText } from "../ui/helper-funcs";
 // import { ReasonSelect } from "../reason-select";
 // import SendReqToggle from "./send-req-toggle";
@@ -41,7 +41,7 @@ const CustomTransfer = ({
     <>
       <input
         placeholder="Amount"
-        className={`border p-4 bg-inherit rounded-lg text-2xl w-full border-neutral-400 ${sulpherBold.className} shadow-md text-black my-4`}
+        className={`border p-4 bg-inherit rounded-lg text-2xl w-full border-neutral-400 ${numeralFace} shadow-md text-black my-4`}
         value={amount}
         type="numeric"
         min={1}
@@ -50,9 +50,7 @@ const CustomTransfer = ({
         }}
         required
       />
-      <div
-        className={`${sulpherBold.className} w-full flex items-center justify-between gap-x-2`}
-      >
+      <div className={`w-full flex items-center justify-between gap-x-2`}>
         <button
           className={`border p-2 rounded-md border-black text-white bg-black w-full`}
           onClick={handleTransfer}

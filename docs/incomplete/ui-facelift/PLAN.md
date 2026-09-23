@@ -116,6 +116,34 @@ naming Phase 3.
 *Reversal:* delete the two `bg-white` classes and their comments. Do not do it without restyling
 the interiors — that is Phase 3's item 5 below.
 
+**BD-5 — Sulphur Point leaves the tree entirely, in Phase 2.**
+Taken 2026-09-22 while building. D3 names three jobs and one face for each, and D3(c) makes
+Josefin *the* display face; a fourth family has no job under it. `sulpherBold` had five call
+sites and `sulpherLight` none. Of the five, four are in files nothing renders —
+`ui/reason-select.tsx` and `players/p2p-custom-transfer.tsx`, both named in *Rules that survive
+unchanged* 3 as board row 1's to delete (`grep -rn "reason-select\|ReasonSelect\|CustomTransfer"
+app components hooks lib` finds only their own definitions and one commented-out import,
+2026-09-22). The fifth, `color-select-drawer.tsx:89`, is a `DrawerContent` whose only children are
+an `sr-only` title and a grid of colour swatches — **no text renders under it at all**, so the
+face was painting nothing while costing 11,008 B. Those four files are **not deleted here**; only
+their font class changed, which is what lets the family go.
+*Reversal:* re-add `Sulphur_Point` to `fonts.ts` and put `sulpherBold.className` back at the five
+sites. It costs 22,288 B of basic-latin woff2 and changes nothing visible.
+
+**BD-6 — the weight mapping when a display interpolation becomes body.**
+Taken 2026-09-22 while building. `josephinBold.className` sets `font-weight: 700` as well as the
+family (verified from the generated rule in `.next/dev/static/chunks/[next]_internal_font_google_josefin_sans_*.css`,
+2026-09-22), so dropping it drops the weight too — and Josefin 700 at its low x-height carries
+roughly the emphasis Manrope 600 does, not Manrope 700. Blanket-preserving 700 would have made
+the app markedly heavier than it is. The mapping used: **body copy** — paragraphs, descriptions,
+notes, empty states, fine print, event rows, toast detail lines — drops the class and inherits
+Manrope 400; **controls and labels** — buttons, toggles, row labels, badges, toast messages —
+drops the class and gains `font-semibold`; `josephinNormal` and `josephinLight` on body drop to
+400. `josephinLight`'s one non-deed site (`my-rooms/page.tsx:71`) is a room code and took the
+numeral face instead.
+*Reversal:* the mapping is one Tailwind utility per site and is visible in the diff as
+`font-semibold`. To go heavier everywhere, `font-semibold` → `font-bold`; to go lighter, delete it.
+
 ---
 
 ## 2. Phases
@@ -257,8 +285,48 @@ which for this phase is the whole of it:
 
 ### Phase 2 — Type, and one money formatter
 
-**Status: `PLANNED`. Lane 1. Driver: Opus 5. Waits on: Phase 1.**
-Implements **D3**.
+**Status: `BUILT` 2026-09-22, Opus 5, in worktree `.claude/worktrees/ui-facelift` (branch
+`worktree-ui-facelift`, on top of `d76e4b3`). Commit hash to be recorded here once Zach commits,
+as Phase 1's was. 36 files, +321/-182. NOT merged to `main`.** Lane 1. Implements **D3**; took
+**BD-5** and **BD-6** while building. Frontend only; nothing in `backend/` was touched.
+
+**Gates — all run from `frontend/` after the last edit, 2026-09-22.** `bun run lint`: **76 files,
+0 errors, 0 warnings** (counted from `eslint . -f json`, not inferred from a silent pass).
+`bunx tsc --noEmit`: clean. `bun run build`: 11/11 static pages, 10 routes. `bun install`: 535
+packages, unchanged — **this phase adds no dependency**; all three faces come from
+`next/font/google`, which was already in use.
+
+**As built — what the phase actually did.**
+
+1. **Three faces, not five.** `components/ui/fonts.ts` now exports Josefin Sans at its three
+   existing weights (display, untouched), **Manrope** (body/UI, variable) and **JetBrains Mono**
+   (numerals, pinned to weight 500), plus a `numeralFace` string that bundles the mono class with
+   `tabular-nums`. `Sulphur_Point` is gone entirely — see BD-5. `sulpherLight` went with it; board
+   row 1's sweep (`5c311e7`, unmerged) does not touch `fonts.ts`, checked before deleting.
+2. **`app/layout.tsx:21`** carries `manrope.className` on `<body>`.
+3. **`lib/utils/money.ts`** is new: one `formatMoney()`, pinned to `en-US`, whole dollars, sign
+   before the `$`. Both named call sites go through it and so do eleven others found while
+   applying the numeral face.
+4. **100 interpolations became 19.** All 19 survivors are display: three deed files plus
+   `card-container.tsx`, the wordmark, two page headings, the FAQ trigger, three offers-inbox
+   headings, the offer form title, the player-card name bar, the tag dialog title, the error
+   page's 4xl title, and the two conditional sites (`room.client.tsx:104`,
+   `room-code-input.tsx:22`) that pick display *or* numeral by what they are rendering.
+5. **`components/ui/sonner.tsx` gained the body face**, which was not in the phase's scope list
+   and turned out to be required by it — see the walk below.
+
+**The count in 0.25 is right about occurrences and one file too many.** `grep -rn
+"josephin[A-Za-z]*\.className\|sulpher[A-Za-z]*\.className"` over `frontend/` returns **100
+occurrences across 35 source files**, verified 2026-09-22. The 36th file the row counts is
+`docs/incomplete/ui-facelift/DESIGN.md` itself, which quotes the pattern in prose. The sizing
+conclusion is unaffected.
+
+**The subagent did its whole work-list in one pass.** Sonnet 5, own worktree, model passed
+explicitly; it returned all 100 rows classified plus a list of numeral sites carrying no font
+class at all, and no pass-off prompt. Its worktree was clean on return — **it edited no source**.
+That "outside the grep" list is what made items 3 and 4 above complete rather than partial; two
+of its entries (`navbar.tsx:148`, and the toast) were still wrong after my first pass and were
+caught by measuring rather than by looking.
 
 **Scope.**
 1. Add the two new faces to `components/ui/fonts.ts` — a body/UI face and a numeral face
@@ -616,6 +684,20 @@ decision — `DESIGN.md` §0 is what may not move.
 | Numeral face | Tabular figures minimum; mono preferred | §3-C. `tabular-nums` on the existing face is the floor, not the goal |
 
 **Dials this plan has already moved, on evidence:** none. Every value above is as ratified.
+
+**The numeral-face dial was tested and NOT moved — Phase 2, 2026-09-22.** The fallback (Josefin +
+`tabular-nums` + one mono) is not needed. Measured on the basic-latin subset, the only one an
+English UI fetches: **before `58,816 B`** (Josefin ×3 = 36,528 B, plus Sulphur Point 300 = 11,280 B
+and 700 = 11,008 B), **after `82,980 B`** (Josefin ×3 unchanged, Manrope variable 24,576 B,
+JetBrains Mono 500 = 21,876 B) — **+24,164 B, +41%**. That is the number to judge a future
+fallback against. Two things shrank it before it was accepted: dropping Sulphur Point removed
+22,288 B of which 11,280 B was never referenced, and **pinning the mono to one weight halved it**
+— JetBrains Mono as a variable file is 40,480 B against 21,876 B for a single static instance.
+Manrope goes the other way and must stay variable: pinned to 400+600+700 it is 24,576 B *per
+weight*, 73,728 B in total, against 24,576 B for the one variable file. Method: `git archive HEAD`
+into a temp dir, `bun install && bun run build`, then the `@font-face` rules in
+`.next/static/chunks/*.css` joined to the file sizes in `.next/static/media/`, keeping only the
+rule whose `unicode-range` is the minified `U+??` (that is `U+0000-00FF`).
 The two most likely to move during the build, and what would move them: the **scrim blur
 radius** (lower it if Phase 3's device check stutters — never raise it without a measurement)
 and the **numeral face** (fall back to Josefin + `tabular-nums` + one mono if Phase 2's weight

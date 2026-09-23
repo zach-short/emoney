@@ -35,9 +35,9 @@ export default function Fallback({
 
   return (
     <div
-      className={`flex flex-col items-center justify-center px-8 w-full min-h-screen ${josephinBold.className}`}
+      className={`flex flex-col items-center justify-center px-8 w-full min-h-screen`}
     >
-      <p className={`text-4xl font`}>{displayTitle}</p>
+      <p className={`text-4xl font ${josephinBold.className}`}>{displayTitle}</p>
 
       <p className={`text-sm font`}>{displayMessage}</p>
 

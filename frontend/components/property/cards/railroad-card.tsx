@@ -1,4 +1,5 @@
-import { josephinNormal } from "@/components/ui/fonts";
+import { josephinNormal, numeralFace } from "@/components/ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { Property } from "@/types/schema";
 import Image from "next/image";
 
@@ -23,11 +24,13 @@ const RailroadCard = ({ property }: { property: Property }) => {
         {property.rentPrices.map((rent: number, index: number) => (
           <div key={index} className={`flex justify-between items-center`}>
             <p>{index === 0 ? "RENT" : `If ${index + 1} are owned`}</p>
-            <p className={`text-end`}>${rent}</p>
+            <p className={`text-end ${numeralFace}`}>{formatMoney(rent)}</p>
           </div>
         ))}
       </section>
-      <div className={`text-cener text-sm pt-4`}>Mortgage Value $100</div>
+      <div className={`text-cener text-sm pt-4`}>
+        Mortgage Value <span className={numeralFace}>{formatMoney(100)}</span>
+      </div>
     </>
   );
 };

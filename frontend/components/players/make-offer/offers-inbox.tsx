@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Offer, OfferNoID, Player, Property, Trade } from "@/types/schema";
 import { RespondOfferPayload } from "@/types/payloads";
-import { josephinBold, josephinNormal } from "@/components/ui/fonts";
+import { josephinBold } from "@/components/ui/fonts";
 import MakeOffer from "./make-offer";
 
 // Every user-facing string in one place. Warm register, matching the kick
@@ -51,19 +51,19 @@ const describeSide = (side: Trade, deeds: Map<string, Property>) => {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 };
 
-const ROW = `${josephinNormal.className} text-base`;
+const ROW = `text-base`;
 const ACTION =
   "rounded-full border px-4 py-2 text-base transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
 
 const Note = ({ heading, note }: { heading: string; note: string }) => (
   <div className={`mt-2 border-l-2 border-neutral-500 pl-3`}>
-    <p className={`${josephinBold.className} text-sm text-neutral-300`}>
+    <p className={`font-semibold text-sm text-neutral-300`}>
       {heading}
     </p>
-    <p className={`${josephinNormal.className} text-base whitespace-pre-wrap`}>
+    <p className={`text-base whitespace-pre-wrap`}>
       &ldquo;{note}&rdquo;
     </p>
-    <p className={`${josephinNormal.className} mt-1 text-xs text-neutral-500`}>
+    <p className={`mt-1 text-xs text-neutral-500`}>
       {copy.noteCaption}
     </p>
   </div>
@@ -122,7 +122,7 @@ const OffersInbox = ({
       <section className={`w-full px-2`}>
         <button
           type="button"
-          className={`border py-4 rounded w-full mt-5 text-2xl ${josephinBold.className}`}
+          className={`border py-4 rounded w-full mt-5 text-2xl font-semibold`}
           onClick={() => setCountering(null)}
         >
           {copy.back}
@@ -151,7 +151,7 @@ const OffersInbox = ({
 
       {forYou.length === 0 && fromYou.length === 0 && (
         <p
-          className={`${josephinNormal.className} mt-8 text-center text-lg text-neutral-400`}
+          className={`mt-8 text-center text-lg text-neutral-400`}
         >
           {copy.empty}
         </p>
@@ -168,7 +168,7 @@ const OffersInbox = ({
               const confirming = confirmingId === o.id;
               return (
                 <li key={o.id} className={`rounded-md border p-3`}>
-                  <p className={`${josephinBold.className} text-xl`}>
+                  <p className={`font-semibold text-xl`}>
                     {from}
                     {o.counterOf ? " counters" : " offers"}
                   </p>
@@ -184,13 +184,13 @@ const OffersInbox = ({
 
                   {confirming ? (
                     <div className={`mt-3 flex flex-col gap-y-2`}>
-                      <p className={`${josephinNormal.className} text-sm`}>
+                      <p className={`text-sm`}>
                         {copy.acceptWarning}
                       </p>
                       <div className={`flex flex-wrap gap-2`}>
                         <button
                           type="button"
-                          className={`${ACTION} ${josephinBold.className} border-green-500 bg-green-700 hover:bg-green-600`}
+                          className={`${ACTION} font-semibold border-green-500 bg-green-700 hover:bg-green-600`}
                           onClick={() => {
                             onRespondOffer(o.id, "ACCEPT");
                             setConfirmingId(null);
@@ -216,7 +216,7 @@ const OffersInbox = ({
                     <div className={`mt-3 flex flex-wrap gap-2`}>
                       <button
                         type="button"
-                        className={`${ACTION} ${josephinBold.className} border-green-500 hover:bg-green-700`}
+                        className={`${ACTION} font-semibold border-green-500 hover:bg-green-700`}
                         onClick={() => setConfirmingId(o.id)}
                       >
                         {copy.accept}
@@ -252,7 +252,7 @@ const OffersInbox = ({
           <ul className={`mt-2 flex flex-col gap-y-3`}>
             {fromYou.map((o) => (
               <li key={o.id} className={`rounded-md border p-3`}>
-                <p className={`${josephinBold.className} text-xl`}>
+                <p className={`font-semibold text-xl`}>
                   To {nameOf(o.toPlayerId)}
                 </p>
                 <p className={ROW}>

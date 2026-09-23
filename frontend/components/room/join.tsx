@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { josephinBold } from "@/components/ui/fonts";
 import { ColorSelect } from "../players/color-select-drawer";
 import Link from "../ui/cusotm-link";
 import Button from "../ui/button-custom";
@@ -39,7 +38,7 @@ const JoinRoomForm = () => {
       onError(error) {
         toast.error("Failed to join room", {
           description: error?.error || "Please try again.",
-          className: josephinBold.className,
+          className: "font-semibold",
         });
       },
     },
@@ -62,7 +61,7 @@ const JoinRoomForm = () => {
       onError(error: { error: string }) {
         setStep(STEP.PLAYER_DETAILS);
         toast.error(error.error, {
-          className: josephinBold.className,
+          className: "font-semibold",
         });
       },
     });
@@ -79,7 +78,7 @@ const JoinRoomForm = () => {
   const joinRoom = () => {
     if (!formData.playerName || !formData.playerColor) {
       toast.error("Please fill out all fields", {
-        className: josephinBold.className,
+        className: "font-semibold",
       });
       return;
     }
@@ -93,6 +92,7 @@ const JoinRoomForm = () => {
   const RoomLookup = () => (
     <>
       <BaseRoomInput
+        numeral
         placeholder="Room Code"
         value={formData.roomCode}
         onChange={(e) => updateFormData("roomCode", e.target.value)}
@@ -102,7 +102,7 @@ const JoinRoomForm = () => {
         onClick={() => {
           if (!formData.roomCode) {
             toast.error("Enter a room code", {
-              className: josephinBold.className,
+              className: "font-semibold",
             });
             return;
           }
@@ -139,7 +139,7 @@ const JoinRoomForm = () => {
     <div className="relative h-screen">
       <Link text="E-Money" href="/" className="top-2 left-2" />
       <div
-        className={`flex flex-col items-center justify-center h-full ${josephinBold.className}`}
+        className={`flex flex-col items-center justify-center h-full`}
       >
         {step === STEP.ROOM_LOOKUP && RoomLookup()}
         {step === STEP.PLAYER_DETAILS && PlayerDetails()}

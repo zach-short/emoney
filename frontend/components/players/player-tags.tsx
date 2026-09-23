@@ -1,5 +1,5 @@
 import { Player } from "@/types/schema";
-import { josephinBold, josephinNormal } from "../ui/fonts";
+import { josephinBold } from "../ui/fonts";
 import { useState } from "react";
 import {
   Dialog,
@@ -250,7 +250,7 @@ const PlayerTags = ({
             onClick={() => setSelectedTag(tag)}
             className={`
             inline-flex items-center px-2 py-1 rounded-full
-            ${tag.color} text-white text-sm ${josephinBold.className}
+            ${tag.color} text-white text-sm font-semibold
             transform hover:scale-105 transition-transform cursor-pointer
           `}
           >
@@ -279,21 +279,21 @@ const PlayerTags = ({
           <div className=" space-y-4">
             <div>
               <h4
-                className={`${josephinBold.className} text-lg mb-2 text-black`}
+                className={`font-semibold text-lg mb-2 text-black`}
               >
                 Description
               </h4>
-              <p className={`text-black ${josephinNormal.className}`}>
+              <p className={`text-black`}>
                 {selectedTag?.description}
               </p>
             </div>
             <div>
               <h4
-                className={`${josephinBold.className} text-lg mb-2 text-black`}
+                className={`font-semibold text-lg mb-2 text-black`}
               >
                 How to Earn
               </h4>
-              <p className={`text-black ${josephinNormal.className}`}>
+              <p className={`text-black`}>
                 {selectedTag?.howToEarn}
               </p>
             </div>

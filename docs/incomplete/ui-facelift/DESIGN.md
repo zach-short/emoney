@@ -162,6 +162,49 @@ cheaper version — keep Josefin everywhere, add `tabular-nums`, add one mono fo
 rejected as the *target* but is explicitly the fallback if a weight measurement during the build
 says so; that fallback is a `PLAN.md` dial, not a reopening of this decision.
 
+**As built, 2026-09-22 — Phase 2 (`PLAN.md`).** The decision stands in all three parts. Six
+things about it are worth the next reader's time.
+
+**The faces chosen, and why.** (a) numerals — **JetBrains Mono**, pinned to weight 500. (b) body —
+**Manrope**, variable, on `<body>`. (c) display — **Josefin Sans**, untouched at its three existing
+weights. Manrope was picked over the more obvious Inter because the whole argument for (b) is
+x-height at 12px and Manrope has it, while being geometric enough to sit beside Josefin rather
+than fight it; Inter would also have been the most templated choice available in an effort whose
+stated aim is to escape a templated look. *Not furlough's fonts* (*Rules that survive unchanged*
+5) ruled out Onest, Bricolage Grotesque and Geist Mono by name.
+
+**The payload question §1.9 left open now has a number, and it does not trigger the fallback.**
+Basic-latin subset, before `58,816 B` → after `82,980 B`, **+24,164 B (+41%)**. The full method
+and the per-family figures are in `PLAN.md` §3. Two findings inside that number are the reusable
+part: **pinning the mono to one weight halves it** (40,480 B variable → 21,876 B static), and
+**Manrope must stay variable** (24,576 B once, against 24,576 B *per weight* pinned).
+
+**The three type jobs are four mechanisms, not three classes.** Display is still
+`josephin*.className`. Body is *the absence of a class* — it is inherited from `<body>`, so making
+something body means deleting an interpolation, not replacing it. Numerals are a `numeralFace`
+string exported from `fonts.ts` rather than a bare `.className`, so the ratified fallback stays a
+one-line edit. And a weight utility beside `numeralFace` does nothing, because the pinned face
+sets `font-weight` outright — which is also what keeps every amount the same weight however deep
+it is nested.
+
+**A fourth family was found and removed.** Sulphur Point had no job under D3(c) and its one live
+call site rendered no text. `PLAN.md` BD-5 has the reversal.
+
+**(b) does not reach the toast by inheritance, and the toast is the surface (b) was argued on.**
+sonner's own stylesheet sets `font-family` on the toaster element itself
+(`:where([data-sonner-toaster])`, `node_modules/sonner/dist/styles.css:27-30`), and a rule on an
+element beats inheritance from `<body>` however low its specificity — `:where()` is zero. Measured
+live 2026-09-22: with the body face only on `<body>`, the 12px room toast computed
+`ui-sans-serif`. The face is now named on the `Toaster` in `components/ui/sonner.tsx`, which is
+sanctioned by D8. **Phase 3 owns that file's size and offset dials and they were not touched.**
+
+**The two money formats are one.** `lib/utils/money.ts` holds the single `formatMoney()`;
+`$1,750` now renders identically on the player card and in the offer panel, verified live. Its
+shape is the union of the two it replaced — the card's `$` and the offer panel's separator — and
+it pins the locale to `en-US`, because the bare `toLocaleString()` it replaced at
+`make-offer/amount.tsx:61` resolved against the server's locale during SSR and the browser's
+after hydration.
+
 ### D4 — Exactly four glass surfaces. Ratified 2026-09-22. (§6.4 → §3-D)
 
 Four, and only four: **the drawer scrim** (`ui/drawer.tsx:31`, `bg-black/80` as of 2026-09-22), **the

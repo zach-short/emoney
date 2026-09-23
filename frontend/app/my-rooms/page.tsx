@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  josephinBold,
-  josephinLight,
-  josephinNormal,
-} from "@/components/ui/fonts";
+import { josephinNormal, numeralFace } from "@/components/ui/fonts";
 import NextLink from "next/link";
 import Link from "@/components/ui/link";
 import { useEffect, useState } from "react";
@@ -52,7 +48,7 @@ const MyRoomsPage = () => {
 const NoExistingRoomsFound = () => {
   return (
     <div
-      className={`${josephinBold.className} flex items-center justify-center gap-y-4 flex-col w-full h-[50vh]`}
+      className={`font-semibold flex items-center justify-center gap-y-4 flex-col w-full h-[50vh]`}
     >
       <p className={`color`}>No rooms found</p>
       <Link href="/join">Join Room</Link>
@@ -68,7 +64,7 @@ const ExistingRooms = ({ rooms }: { rooms: string[] }) => {
         <NextLink
           key={index}
           href={`/room/${room}`}
-          className={`font ${josephinLight.className} text-2xl`}
+          className={`font ${numeralFace} text-2xl`}
         >
           {room}
         </NextLink>

@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-import { josephinBold, josephinNormal } from "./fonts";
 import { ReactNode } from "react";
 
 interface ToastProps {
@@ -14,9 +13,9 @@ const Toast = ({ message, details, type = "error", icon }: ToastProps) => {
     <div className="flex items-center gap-2">
       {icon && <span className="icon">{icon}</span>}
       <div>
-        <p className={`${josephinBold.className}`}>{message}</p>
+        <p className={`font-semibold`}>{message}</p>
         {details && (
-          <p className={`text-sm text-gray-400 ${josephinNormal.className}`}>
+          <p className={`text-sm text-gray-400`}>
             {details}
           </p>
         )}

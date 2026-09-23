@@ -1,6 +1,7 @@
 "use client";
 import { JSX, useId, useState } from "react";
-import { josephinBold, josephinNormal } from "@/components/ui/fonts";
+import { josephinBold, numeralFace } from "@/components/ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { Offer, OfferNoID, Player } from "@/types/schema";
 import Amount from "./amount";
 import Properties from "./properties";
@@ -187,12 +188,12 @@ const MakeOffer = ({
   };
   return (
     <>
-      <section className={`${josephinNormal.className} w-full px-2 pb-8`}>
+      <section className={`w-full px-2 pb-8`}>
         {view ? (
           <>
             <button
               type="button"
-              className={`border py-4 rounded w-full mt-5 text-2xl ${josephinBold.className}`}
+              className={`border py-4 rounded w-full mt-5 text-2xl font-semibold`}
               onClick={() => setView(null)}
             >
               Back
@@ -225,7 +226,13 @@ const MakeOffer = ({
                      w-48 p-3 rounded-md`}
                   onClick={() => setView("offer_amount")}
                 >
-                  {!offer?.offer?.amount ? "Cash" : `$${offer?.offer?.amount}`}
+                  {!offer?.offer?.amount ? (
+                    "Cash"
+                  ) : (
+                    <span className={numeralFace}>
+                      {formatMoney(offer?.offer?.amount)}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -238,8 +245,11 @@ const MakeOffer = ({
                   }
                     p-3 rounded-md`}
                 >
-                  {(offer.offer.properties?.length ?? 0) > 0 &&
-                    offer.offer.properties?.length}{" "}
+                  {(offer.offer.properties?.length ?? 0) > 0 && (
+                    <span className={numeralFace}>
+                      {offer.offer.properties?.length}
+                    </span>
+                  )}{" "}
                   Properties
                 </button>
                 {/* <button
@@ -269,9 +279,13 @@ const MakeOffer = ({
 
                     border p-3 rounded-md w-48`}
                 >
-                  {!offer?.request?.amount
-                    ? "Cash"
-                    : `$${offer.request.amount}`}
+                  {!offer?.request?.amount ? (
+                    "Cash"
+                  ) : (
+                    <span className={numeralFace}>
+                      {formatMoney(offer.request.amount)}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -284,8 +298,11 @@ const MakeOffer = ({
                     border p-3 rounded-md`}
                   onClick={() => setView("request_properties")}
                 >
-                  {(offer.request.properties?.length ?? 0) > 0 &&
-                    offer.request.properties?.length}{" "}
+                  {(offer.request.properties?.length ?? 0) > 0 && (
+                    <span className={numeralFace}>
+                      {offer.request.properties?.length}
+                    </span>
+                  )}{" "}
                   Properties
                 </button>
                 {/* <button
@@ -320,9 +337,9 @@ const MakeOffer = ({
                 onChange={(e) =>
                   setOffer((prev) => ({ ...prev, note: e.target.value }))
                 }
-                className={`${josephinNormal.className} w-full rounded border border-white bg-black p-3 text-base text-white placeholder:text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
+                className={`w-full rounded border border-white bg-black p-3 text-base text-white placeholder:text-neutral-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
               />
-              <p className={`text-right text-xs text-neutral-500`}>
+              <p className={`text-right text-xs text-neutral-500 ${numeralFace}`}>
                 {(offer.note ?? "").length}/{NOTE_MAX_LENGTH}
               </p>
             </div>
@@ -331,7 +348,7 @@ const MakeOffer = ({
                 type="button"
                 onClick={send}
                 disabled={!canSend}
-                className={`${josephinBold.className} w-full rounded-full border border-white p-4 text-2xl transition-colors hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:border-neutral-600 disabled:text-neutral-600 disabled:hover:bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
+                className={`font-semibold w-full rounded-full border border-white p-4 text-2xl transition-colors hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:border-neutral-600 disabled:text-neutral-600 disabled:hover:bg-transparent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
               >
                 {copy.send(isCounter)}
               </button>

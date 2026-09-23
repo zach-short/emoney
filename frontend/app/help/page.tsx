@@ -4,7 +4,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { josephinBold, josephinNormal } from "@/components/ui/fonts";
+import { josephinBold } from "@/components/ui/fonts";
 import Link from "next/link";
 import { IoIosArrowBack } from "react-icons/io";
 
@@ -105,7 +105,7 @@ const HelpPage = () => {
                   {question.title}
                 </AccordionTrigger>
                 <AccordionContent
-                  className={`color ${josephinNormal.className} text-xl px-6`}
+                  className={`color text-xl px-6`}
                 >
                   {question.description}
                 </AccordionContent>

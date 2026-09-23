@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { josephinBold } from "@/components/ui/fonts";
 import { ColorSelect } from "../players/color-select-drawer";
 import CustomLink from "../ui/cusotm-link";
 import { Slider } from "../ui/slider";
@@ -44,7 +43,7 @@ const CreateRoomForm = () => {
       onError(error: { error: string }) {
         toast.error("Error creating room", {
           description: error.error,
-          className: josephinBold.className,
+          className: "font-semibold",
         });
       },
     },
@@ -62,7 +61,7 @@ const CreateRoomForm = () => {
           setStep(STEP.PLAYER_DETAILS);
         } else if (existingRoomFound) {
           toast.error("Room code already taken", {
-            className: josephinBold.className,
+            className: "font-semibold",
           });
         }
       },
@@ -72,7 +71,7 @@ const CreateRoomForm = () => {
           "error in /emoney-frontend/components/room/create.tsx",
         );
         toast.error(error.error, {
-          className: josephinBold.className,
+          className: "font-semibold",
         });
       },
     });
@@ -89,7 +88,7 @@ const CreateRoomForm = () => {
   const handleCreateRoom = () => {
     if (!formData.roomName || !formData.roomCode || !formData.playerName) {
       toast.error("Please fill out all fields", {
-        className: josephinBold.className,
+        className: "font-semibold",
       });
       return;
     }
@@ -104,6 +103,7 @@ const CreateRoomForm = () => {
         onChange={(e) => updateFormData("roomName", e.target.value)}
       />
       <BaseRoomInput
+        numeral
         placeholder="New Room Code"
         value={formData.roomCode}
         onChange={(e) => updateFormData("roomCode", e.target.value)}
@@ -113,7 +113,7 @@ const CreateRoomForm = () => {
         onClick={() => {
           if (!formData.roomCode || !formData.roomName) {
             toast.error("Please fill out the fields", {
-              className: josephinBold.className,
+              className: "font-semibold",
             });
           } else {
             checkPlayerAlreadyInRoom();
@@ -148,6 +148,7 @@ const CreateRoomForm = () => {
   const GameRulesStep = () => (
     <>
       <BaseRoomInput
+        numeral
         placeholder="Starting Cash"
         value={formData.startingCash}
         onChange={(e) =>
@@ -189,7 +190,7 @@ const CreateRoomForm = () => {
     <div className="relative h-screen">
       <CustomLink text="E-Money" href="/" className="top-2 left-2" />
       <div
-        className={`flex flex-col items-center justify-center h-full ${josephinBold.className}`}
+        className={`flex flex-col items-center justify-center h-full`}
       >
         {step === STEP.ROOM_DETAILS && RoomDetailsStep()}
         {step === STEP.PLAYER_DETAILS && PlayerDetailsStep()}

@@ -85,3 +85,83 @@ entry.
   `p2p-custom-transfer.tsx:4`.
 - **Right answer.** Nothing to walk. The literal came out with the other five; the file is dead
   code already owned by board row 1 / TRIAGE B5.
+
+---
+
+## Phase 2 — Type, and one money formatter. Entries written 2026-09-22.
+
+**How the phase was walked.** A dev server from this worktree against the production API
+(`.claude/launch.json` → `ui-facelift-frontend`; the entry had to be copied into the *primary*
+checkout's `launch.json` for the preview tool to see it, and was restored afterwards — the
+primary checkout is clean), in the Claude desktop browser pane at **390×844**, the width the
+done-when names. Same throwaway production room **`UIP1CHK`** Phase 1 used, now with **two**
+players: "Banker" (banker, `$1,825` after three banker adds of $150, $50 and $25 made during
+this walk) and **"P2Check"** (`$1,500`), added by a direct `POST` to
+`https://api.emoney.club/v1/rooms/UIP1CHK/players` because the offer panel cannot be reached
+with one player in the room. **Both are real rows in the production database — delete the room
+when you next open the app.** Every "verified" below is a screenshot or a `getComputedStyle` /
+`Range.getBoundingClientRect()` read, named per entry.
+
+### R2.1 — A changing balance does not reflow. **Verified — this is the load-bearing one.**
+- **Where.** Any room, as banker → your own player card → ⊕ beside the balance → an amount →
+  Confirm. Watch the number, not the toast.
+- **Right answer.** The digits change and **nothing moves horizontally**. Verified 2026-09-22 by
+  measuring the balance element across a real `$1,600 → $1,750` through the production API: width
+  `86.40625px`, left `144.296875`, right `230.703125` — **identical before and after** — and a
+  per-character `Range` measurement showing every glyph exactly `14.406px` wide, so glyph *n* sits
+  at the same x whatever digit it holds. Computed style: `JetBrains Mono`, weight `500`,
+  `font-variant-numeric: tabular-nums`. **This is what Phase 5's count-up needs to be true
+  before it animates that number.**
+
+### R2.2 — The player card and the offer panel render the same amount identically. **Verified.**
+- **Where.** Note your own balance on your card. Then another player's card → the name bar →
+  *I'm offering* → **Cash**. Compare the two.
+- **Right answer.** Byte-identical strings, same face, same weight. At `c14faa5` the card gave
+  `$1875` and the panel gave `1,500`. Verified 2026-09-22: card `$1,750`, panel `$1,750`, both
+  `JetBrains Mono` / `500` / `tabular-nums`; the panel's "Your balance:" label is Manrope 600.
+
+### R2.3 — The 12px room toast is in the body face and legible on a phone. **Verified.**
+- **Where.** 390×844. Any room action that raises a notification — the banker add above is the
+  easiest.
+- **Right answer.** The toast text is **Manrope**, not the system stack and not Josefin. Verified
+  2026-09-22 on `[data-sonner-toast] [data-title]`: `Manrope`, `12px`, weight `500`, plus a
+  screenshot of "🏦 Banker has added $25 to Banker's balance". **It computed `ui-sans-serif`
+  until `components/ui/sonner.tsx` named the face** — see the D3 as-built note. It is still 12px
+  and still overlaps the header at 390: both are Phase 3's dials, deliberately untouched here.
+
+### R2.4 — The event history is legible at 390×844. **Verified.**
+- **Where.** 390×844, ☰ → **Event History**.
+- **Right answer.** Every row reads cleanly at its 12px. Verified 2026-09-22: three rows,
+  `Manrope` / `12px` / weight `400`, plus a screenshot — "🏦 Banker has added $150 to Banker's
+  balance · 2 min ago".
+
+### R2.5 — The navbar menu's four values are one numeral column. **Verified.**
+- **Where.** ☰, the four rows: Bank's Properties, Free Parking, Event History, Room Code.
+- **Right answer.** All four values in `JetBrains Mono` / `500`, labels in `Manrope` / `400`.
+  Verified 2026-09-22 by reading all four. **Bank's Properties was still Manrope on the first
+  pass** and was caught by measuring, not by looking — it is the one numeral surface in the app
+  that carried no font class and no sibling to compare against.
+
+### R2.6 — The room code reads as a code wherever it appears. **Not fully walked.**
+- **Where.** Four places: ☰ → Room Code (**verified**, above); the sticky header of a room with
+  **no name set** (**not walked** — `UIP1CHK` has the name "facelift phase 1", so the header
+  correctly shows the *name* in Josefin and the numeral branch never rendered); `/join`'s Room
+  Code field and `/create`'s New Room Code and Starting Cash fields (**not walked**).
+- **Right answer.** A code or a cash figure is mono; a *name* is Josefin. The header at
+  `room.client.tsx:104` switches on `room?.name`, so a named room showing Josefin is correct, not
+  a miss. To check the unwalked branch, create a room with a code and no name.
+
+### R2.7 — The property deed's rent ladder lines up. **Not walked.**
+- **Where.** ☰ → Bank's Properties → a colour group → a deed. Also a player's Properties drawer.
+- **Right answer.** The right-hand column of amounts — RENT, the four house rows, HOTEL, Mortgage
+  Value, Houses/Hotels Cost — is a straight vertical edge, in the mono, while "With 1 House" and
+  the fine print stay Josefin: the deed is still paper. **Not reached in this walk** — the check
+  room has no properties dealt. Worth a look because it is the one place the numeral face was
+  applied *inside* a preserved display artifact.
+
+### R2.8 — Nothing lost its emphasis in the body sweep. **Not walked, judged by eye.**
+- **Where.** Anywhere a button, a row label or a badge used to be bold: the Pay-or-Request
+  button, offers-inbox Accept, the Cash King tag, Send offer, the free-parking toggle.
+- **Right answer.** They still read as emphasised. `PLAN.md` BD-6 maps Josefin 700 → Manrope 600
+  on these, because Josefin's 700 at its x-height is not Manrope's 700. **If any of them now
+  looks heavier or lighter than it should, that is a one-utility fix and BD-6 says which.**

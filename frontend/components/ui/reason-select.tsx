@@ -8,7 +8,6 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { sulpherBold } from "./fonts";
 import { useState } from "react";
 
 const reasons = [
@@ -36,7 +35,7 @@ export function ReasonSelect({
     <Drawer>
       <DrawerTrigger asChild>
         <button
-          className={`border p-4 bg-inherit rounded-lg text-2xl w-full border-neutral-400 ${sulpherBold.className} shadow-md text-black  mb-4 `}
+          className={`border p-4 bg-inherit rounded-lg text-2xl w-full border-neutral-400 shadow-md text-black  mb-4 `}
         >
           {!selectedReason.name ? (
             <div className={`text-slate-400 text-start`}>Select Reason</div>
@@ -47,9 +46,7 @@ export function ReasonSelect({
           )}
         </button>
       </DrawerTrigger>
-      <DrawerContent
-        className={`${sulpherBold.className} h-[70vh]`}
-      >
+      <DrawerContent className={`h-[70vh]`}>
         <DrawerHeader>
           <DrawerTitle>Select Reason</DrawerTitle>
           <div className={`flex flex-col gap-y-4 mt-4`}>

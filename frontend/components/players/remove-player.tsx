@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
-import { josephinBold, josephinNormal } from "../ui/fonts";
 import { CiCircleRemove } from "react-icons/ci";
 
 type Disposition = KickPlayerPayload["disposition"];
@@ -140,13 +139,13 @@ const RemovePlayer = ({
             text-white selected, so a black card erases both the copy and the
             selection. Phase 3 restyles it and removes this bg-white. */}
         <DialogContent
-          className={`sm:max-w-[425px] ${josephinBold.className} bg-white text-black max-h-[85vh] overflow-y-auto`}
+          className={`sm:max-w-[425px] bg-white text-black max-h-[85vh] overflow-y-auto`}
         >
           <DialogHeader>
             <DialogTitle>{copy.title}</DialogTitle>
           </DialogHeader>
 
-          <p className={`${josephinNormal.className} text-sm`}>{copy.body}</p>
+          <p className={`text-sm`}>{copy.body}</p>
 
           <div className={`flex flex-col gap-y-2`}>
             <p className={`text-sm`}>{copy.dispositionHeading}</p>
@@ -171,7 +170,7 @@ const RemovePlayer = ({
             <div className={`flex flex-col gap-y-2`}>
               <p className={`text-sm`}>{copy.successorHeading}</p>
               {successors.length === 0 ? (
-                <p className={`${josephinNormal.className} text-sm`}>
+                <p className={`text-sm`}>
                   {copy.noSuccessors}
                 </p>
               ) : (

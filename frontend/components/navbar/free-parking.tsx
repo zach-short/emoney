@@ -1,6 +1,7 @@
 import { FreeParkingPayload } from "@/types/payloads";
 import { useState } from "react";
-import { josephinBold, josephinNormal } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { Player } from "@/types/schema";
 import { DrawerClose } from "../ui/drawer";
 import Toast from "../ui/toasts";
@@ -33,12 +34,13 @@ const FreeParkingDialog = ({
 
   return (
     <div className="">
-      <div className={`${josephinNormal.className} text-xl mb-4`}>
-        Free Parking: ${freeParking}
+      <div className={`text-xl mb-4`}>
+        Free Parking:{" "}
+        <span className={numeralFace}>{formatMoney(freeParking)}</span>
       </div>
 
       <button
-        className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-md ${josephinBold.className} mb-4`}
+        className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-md font-semibold mb-4`}
         onClick={() => setType(type === "ADD" ? "REMOVE" : "ADD")}
       >
         <div
@@ -72,7 +74,7 @@ const FreeParkingDialog = ({
         className="w-full p-4 rounded border bg-inherit text-xl"
       />
 
-      <div className={`flex gap-4 mt-4 items-center ${josephinBold.className}`}>
+      <div className={`flex gap-4 mt-4 items-center font-semibold`}>
         <div className="flex-1 py-3 rounded text-center" onClick={onClick}>
           Cancel
         </div>
@@ -97,7 +99,7 @@ const FreeParkingDialog = ({
               Toast({
                 icon: <PiMoneyWavyThin className="text-red-700 text-xl" />,
                 message: "Insufficient funds",
-                details: `You need $${Number(amount) - player.balance}`,
+                details: `You need ${formatMoney(Number(amount) - player.balance)}`,
               });
               return;
             } else {

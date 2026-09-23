@@ -10,7 +10,7 @@ import {
   Room,
 } from "@/types/schema";
 import Navbar from "../navbar/navbar";
-import { josephinBold } from "../ui/fonts";
+import { josephinBold, numeralFace } from "../ui/fonts";
 import {
   BankerTransactionPayload,
   FreeParkingPayload,
@@ -96,8 +96,13 @@ const RoomView = ({
           page and only stayed invisible because nothing gave it height. */}
       <header className="sticky top-0 z-50 bg-black">
         <div className="relative flex h-16 items-center justify-center px-4">
+          {/* A name is a word and keeps the display face; a code is a string of
+              characters that has to be read out loud and typed by someone else,
+              so it gets the numeral face (DESIGN.md D3(a)). */}
           <div
-            className={`${josephinBold.className} select-none text-white text-2xl`}
+            className={`${
+              room?.name ? josephinBold.className : numeralFace
+            } select-none text-white text-2xl`}
           >
             {room?.name || room?.code}
           </div>

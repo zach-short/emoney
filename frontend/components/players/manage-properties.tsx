@@ -1,7 +1,8 @@
 import { Player, Property } from "@/types/schema";
 import { useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
-import { josephinBold, josephinNormal } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { ManagePropertiesPayload } from "@/types/payloads";
 import {
   getDisplayState,
@@ -74,7 +75,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
   if (!player?.properties || player?.properties.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className={`text-xl ${josephinBold.className} text-white`}>
+        <p className={`text-xl font-semibold text-white`}>
           No Properties Found
         </p>
       </div>
@@ -205,7 +206,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
       <>
         {houseBuildingMode && (
           <>
-            <div className={`${josephinNormal.className} text-center `}>
+            <div className={`text-center`}>
               Develop Property
             </div>
             <div className="space-y-4">
@@ -215,15 +216,17 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
                 </button>
                 {!NO_CHANGE ? (
                   <>
-                    <span className={` ${josephinBold.className}`}>
+                    <span className={`font-semibold`}>
                       {transactionType === "ADD_HOUSES" ? "Buy " : "Sell "}
-                      {getDisplayStateManage(numHouses, properties.length)} (
-                      {transactionType === "ADD_HOUSES" ? "-" : "+"}$
-                      {BUY ? totalCost : totalCost / 2})
+                      {getDisplayStateManage(numHouses, properties.length)}{" "}
+                      <span className={numeralFace}>
+                        ({transactionType === "ADD_HOUSES" ? "-" : "+"}
+                        {formatMoney(BUY ? totalCost : totalCost / 2)})
+                      </span>
                     </span>
                   </>
                 ) : (
-                  <div className={` ${josephinBold.className}`}>No Change</div>
+                  <div className={`font-semibold`}>No Change</div>
                 )}
                 <button onClick={handleIncrement}>
                   <CiCirclePlus className="h-12 w-12 rounded-full shadhow-md  text-white " />
@@ -235,20 +238,20 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
                     key={property.propertyId}
                     className="flex justify-between items-center"
                   >
-                    <span className={` ${josephinBold.className}`}>
+                    <span className={`font-semibold`}>
                       {
                         properties.find((p) => p.id === property.propertyId)
                           ?.name
                       }
                     </span>
-                    <span className={` ${josephinBold.className}`}>
+                    <span className={numeralFace}>
                       {getDisplayState(property.count)}
                     </span>
                   </div>
                 ))}
               </div>
               <button
-                className={`${josephinNormal.className} w-full p-2 ${
+                className={`w-full p-2 font-semibold ${
                   BUY ? "bg-red-500" : "bg-green-600"
                 }  rounded`}
                 disabled={currentHouses === initialHouses}
@@ -274,7 +277,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
                 Confirm
               </button>
               <button
-                className={`w-full border-[1px] border-grey-400 p-2 rounded ${josephinNormal.className}`}
+                className={`w-full border-[1px] border-grey-400 p-2 rounded`}
                 onClick={() => {
                   setHouseBuildingMode(false);
                 }}
@@ -329,7 +332,11 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
                   className="bg-yellow-600 text-white p-2 rounded text-sm"
                   onClick={() => handleMortgage(property)}
                 >
-                  Mortgage (${property.price / 2})
+                  Mortgage (
+                  <span className={numeralFace}>
+                    {formatMoney(property.price / 2)}
+                  </span>
+                  )
                 </button>
               )}
               {property.isMortgaged && (
@@ -337,7 +344,11 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
                   className="bg-blue-600 text-white p-2 rounded text-sm"
                   onClick={() => handleUnmortgage(property)}
                 >
-                  Unmortgage (${Math.floor(property.price * 0.55)})
+                  Unmortgage (
+                  <span className={numeralFace}>
+                    {formatMoney(property.price * 0.55)}
+                  </span>
+                  )
                 </button>
               )}
               {/* {property.developmentLevel === 0 && canMortgage && (
@@ -357,9 +368,9 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
   };
 
   return (
-    <div className={`space-y-4 ! ${josephinBold.className}`}>
+    <div className={`space-y-4 !`}>
       {!isOwnCard && (
-        <p className={`text-center text-sm text-gray-400 ${josephinNormal.className}`}>
+        <p className={`text-center text-sm text-gray-400`}>
           {player?.name}&apos;s deeds &mdash; view only
         </p>
       )}

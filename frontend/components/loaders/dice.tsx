@@ -1,8 +1,6 @@
-import { josephinBold } from "../ui/fonts";
-
 const DiceLoader = () => {
   return (
-    <div id="loading" className={`${josephinBold.className}`}>
+    <div id="loading" className={`font-semibold`}>
       <div className="dice">
         <div className="front">1</div>
         <div className="back">6</div>
