@@ -250,6 +250,60 @@ touches.
 *Reversal:* delete the prop and inline `font border-yellow-200` in both components again; the three
 call sites then go back to yellow.
 
+**BD-13 — what F1 actually triggers from, because the design's premise is wrong. Zach's call,
+asked and answered in chat 2026-09-23.**
+D6 and §3-F both say "a property's name anywhere — the bank list, a player's holdings, an offer's
+contents — opens a popover". **Grepped 2026-09-23: a property name renders in only five places and
+three of them are the deed itself** (`common-card.tsx:63`, `utility-card.tsx:18`,
+`railroad-card.tsx:18`), which already shows the full ladder. The only bare-name sites are
+`offers-inbox.tsx:45` (names joined into one prose string) and `purchase-properties-bank.tsx:103`
+(inside the same drawer, *after* the deed). So "a property's name" had almost nowhere to attach.
+Put to Zach as a real question with three options. **Chosen: the player card's "Properties N" row
+at ≥`lg`, plus each deed named in an offer.** Explicitly **not** the navbar's "Bank's Properties":
+that row lives inside a `DrawerContent`, so a popover there floats over an open sheet, and
+`navbar.tsx` is the file board row 1's unmerged sweep (`5c311e7`) restructures into a view union.
+*Reversal:* revert the two call sites; `deed-popover.tsx` is then unreferenced and can be deleted
+whole.
+
+**BD-14 — F2 ships thin, because the card face already shows half of it. Zach's call, chat
+2026-09-23.**
+D6 names four facts. Two are already on the card face — the balance (`player-card-content.tsx`'s
+headline `<p>`) and the property count (the Properties row). Of the other two, **`isBanker`
+renders nowhere in the app at all** (grepped 2026-09-23: it appears only as a gate on the banker's
+own controls and in `remove-player.tsx:115`'s successor logic), and a *total* pending-offer count
+for another player **is not on the client** — `offers` carries only the current player's offers,
+both directions (`room.client.tsx`). Chosen against dropping the popover for a permanent banker
+mark, and against restating all four as ratified. **Built:** banker status, offers pending
+*between the two of you* (or waiting on you, on your own card), plus balance and property count
+restated so the panel reads whole. The offers label says which of the two it is rather than
+implying a number the client cannot know.
+*Reversal:* delete `player-glance.tsx` and the `hidden lg:block` button in `player-card-content.tsx`;
+the balance goes back to a single `<p>` and the `offers` prop on `PlayerDetails` becomes unused.
+
+**BD-15 — for F1's single deed the deed IS the surface, and it stays paper. Zach's call, chat
+2026-09-23.**
+Phase 4's scope item 5 says popover surfaces are one of D4's four glass surfaces and take the
+`overlay` step. D4 says the title deed is **explicitly not glassed** — "they are paper". F1's
+content is the existing `PropertyCard`, so the two point different ways; asked rather than taken,
+because "exactly four" is the load-bearing word in D4 (R12). **Chosen:** `PopoverContent`'s glass
+skin is stripped for a single deed (`bg-transparent`, `p-0`, `border-0`, `backdrop-blur-none`) and
+the paper deed is the whole surface. No fifth glass surface. **The deed-LIST popover keeps the
+glass**, because there the panel is the surface and the deeds sit on it — the same rule read the
+other way round. Verified live 2026-09-23: single-deed surface computes `rgba(0, 0, 0, 0)` /
+`backdrop-filter: none` with the deed at `rgb(255, 255, 255)`; the list surface computes
+`rgba(0, 0, 0, 0.55)` / `blur(12px)`.
+*Reversal:* drop the four override classes in `DeedPopover`; the deed then sits on a glass tray.
+
+**BD-16 — the popover ships with no entry animation.**
+Taken 2026-09-23 while building. The stock shadcn popover carries four
+`data-[state=*]:animate-*` classes. Shipping them here would put unguarded motion in the tree
+*before* Phase 5 establishes the reduced-motion gate this plan ratified (§3, "state kept, movement
+removed"; row 0.14 confirms nothing in the tree handles `prefers-reduced-motion` as of
+2026-09-23), and **Phase 6 owns panel transitions** by name. So the popover appears instantly,
+which is also what the rest of the app does today.
+*Reversal:* add the four `data-[state=*]:animate-*` classes to `PopoverContent` — but do it in
+Phase 6, behind the gate, not before it.
+
 ---
 
 ## 2. Phases
@@ -662,8 +716,58 @@ literals it has to find, not by the number of surfaces the decision names.
 
 ### Phase 4 — Popovers F1 and F2, at `lg`
 
-**Status: `PLANNED`. Lane 1. Driver: Opus 5. Waits on: Phases 1 and 3. Carries BD-1.**
-Implements **D6**.
+**Status: `BUILT` 2026-09-23, commit `<pending — Zach commits>`. Lane 1. Driver: Opus 5 (the
+session checked its own model against this table before reading anything). Waits on: Phases 1 and
+3, both landed.** Implements **D6**. Carries **BD-1**; took **BD-13**…**BD-16** while building,
+all in §1 with their reversals. Frontend only; nothing in `backend/` was touched.
+
+**As built — the design's premise for F1 was wrong, and that reshaped the phase (R5).** Scope
+item 2 reads "a property's name, wherever it renders". A property name renders in five places and
+**three of them are the deed itself**, which already shows the terms; see **BD-13** for the grep
+and for what Zach chose instead. The consequence for this phase's own done-when is stated under
+*Done when* below — **the four-interaction bank path is unchanged, by decision**, and the honest
+counts are different numbers against different paths.
+
+**What was built.** Three new files — `components/ui/popover.tsx` (the primitive, house-styled),
+`components/property/deed-popover.tsx` (F1: `DeedPopover` for one deed, `DeedListPopover` for a
+holding) and `components/players/player-glance.tsx` (F2) — plus three wired call sites in
+`player-card-content.tsx`, `player-card.tsx` and `make-offer/offers-inbox.tsx`.
+
+**The `lg` gate is CSS, not a hook.** Every gated surface renders twice, once with `lg:hidden` and
+once with `hidden lg:…`. A `useMediaQuery` would disagree between the server and the first client
+frame, because the app prerenders all 11 pages. It also means **below `lg` the popover trigger is
+`display: none` and therefore not in the tab order at all** — a disabled-but-focusable control was
+the specific mistake `property/cards/card-container.tsx` already documents.
+
+**`describeSide` returns nodes now, not a string** (`offers-inbox.tsx`). Its prose is unchanged,
+including the `$${amount}` form, which deliberately still bypasses `formatMoney()` because it
+mirrors `sideDescription` in `backend/websocket/offers.go`, the side that writes the settled
+record. Raised separately rather than fixed here.
+
+**Two defects found by measuring rather than by eye, both fixed.** (1) **The deed list wrapped one
+deed per row.** `overflow-y-auto` takes ~7px for the scrollbar, so `w-[35rem]` left a 521px content
+box where two 256px deeds plus a 16px gap need 528 — seven short. Now `w-[37rem]`; measured
+afterwards at `left: 566` and `left: 838`, same `top`. (2) **The `overlay` elevation was painting
+twice on a single deed.** `cn()`'s `twMerge` does **not** know `shadow-overlay` is a shadow
+utility — it is a custom `boxShadow` key, not one twMerge ships with — so `shadow-none` did not
+cancel it and both classes applied. The wrapper's border box is exactly the deed's box (measured
+identical at `[343, 300, 256, 371]`), so the step was drawn on the same rectangle twice and read
+darker than an `overlay`. Fixed by letting the popover surface own the shadow and giving the deed
+none. **This is a live trap for any future `shadow-*` override in this app**, not just here.
+
+**The risk that did not materialise.** F1 inside the offers drawer means a Radix popover portalled
+out of an open vaul sheet, which could have fought its focus trap or dismissed it on
+pointer-down-outside. Walked 2026-09-23: the popover opens and **the drawer stays open**
+(`data-state: "open"`, height 810). Radix's dismissable-layer stack and vaul's cooperate.
+
+**`.claude/launch.json` in the primary checkout was NOT touched this phase**, unlike Phases 1, 2
+and 3. The preview tool does read the primary copy and not the worktree's — confirmed again
+2026-09-23, `preview_start` refused `ui-facelift-frontend` and listed only the primary's three —
+but the dev server can simply be started directly from the worktree with the two API variables and
+opened by URL, which touches no shared file at all. **Use that instead; the touch-and-restore dance
+the three earlier phases did is avoidable.** The one hard constraint is the port: the backend's
+CORS allowlist names `http://localhost:3000` literally (`backend/main.go:22-26`), so **port 3000 or
+nothing** — port 3200 was blocked by CORS on every request before this was worked out.
 
 **Scope.**
 1. Install `@radix-ui/react-popover` — **pre-approved to propose, and GATE 2 is the approval to
@@ -698,11 +802,30 @@ cd frontend && bun run build
 - **A rent ladder is readable without leaving the room.** At ≥`lg`, click a property name and read
   its terms with the room still visible behind. Count the interactions: it must be one, against
   the four the audit measured.
+  **MET, against different paths than this line assumed — read BD-13 first.** Walked 2026-09-23 at
+  1280×900. One interaction to a holding's deeds (click "Properties 3" on another player's card),
+  against two-to-three for the drawer it replaces; one interaction to a deed named in an offer,
+  against **no path at all** — that is F1's real win and the audit never counted it, because a deed
+  in an offer was simply unreachable. **The four-interaction bank path is unchanged and was not in
+  scope**: Zach excluded the navbar (BD-13), so "four → one" is *not* a claim this phase gets to
+  make. It was re-walked below `lg` and still measures four.
 - **Below `lg`, nothing changed at all.** At 390×844, walk menu → Bank's Properties → colour group
   → card. It must behave exactly as before this phase. Two implementations of one feature is the
   accepted cost of D6; a regression in the drawer path is not.
+  **MET.** Walked 2026-09-23 at 375×812 (the pane's mobile preset; 390×844 was not available as a
+  preset and the gate is a breakpoint, not a width). Menu → Bank's Properties → orange → St. James
+  Place, deed and rent ladder intact in the horizontal strip. Measured, not eyeballed: at 375px
+  every popover trigger computes `display: none` and every drawer trigger `display: flex`/`block`,
+  and the balance is a `<p>` again with its `<button>` twin unpainted.
 - **The popover reads as floating, not as a replacement.** It must sit above the room on the
   `overlay` elevation step, not read as another sheet.
+  **MET, measured.** The glass surfaces compute `rgba(0, 0, 0, 0.55)` + `backdrop-filter:
+  blur(12px)` — the ratified scrim dials — with a `1px rgb(228, 228, 231)` token border and the
+  `overlay` step exactly once: `rgba(255, 255, 255, 0.09) 0 1px 0 inset` plus
+  `rgba(0, 0, 0, 0.75) 0 8px 24px -6px`. The single-deed surface is transparent with the paper deed
+  carrying the step (BD-15). The list popover caps itself on Radix's own measurement
+  (`--radix-popover-content-available-height: 463.5px`) and scrolls rather than leaving the
+  viewport: `bottom: 888` against a 900px viewport.
 
 **Watch for.**
 - **Popovers are a mouse idiom and this is a phone-first product.** The `lg` gate is the whole
@@ -710,6 +833,16 @@ cd frontend && bun run build
   breakpoint and needs a supersession, not a judgement call.
 - **Bundle weight lands on the room page**, the one page that must stay snappy, and nothing in
   this repo measures bundle size (design §5). Record the delta.
+  **RECORDED, 2026-09-23. `@radix-ui/react-popover@1.1.23`; `bun install` reports 535 → 561
+  packages (+26).** Total client JS across `.next/static/**/*.js`, same 23 chunks either side:
+  **953,244 B → 1,022,858 B, +69,614 B (+7.3%)** raw; **282,932 B → 306,518 B, +23,586 B (+8.3%)**
+  gzipped, which is the number that actually ships. Method: build this tree, then
+  `git archive HEAD` into a `mktemp -d`, `bun install && bun run build` there, and compare — which
+  is also Part 6's HEAD-isolation check, and HEAD built clean. **The room route's own
+  `build-manifest.json` is useless for this**: it reported an identical 551,485 B across 6 chunks
+  on both trees, because it lists shared chunks only. The dep is imported only by room-route
+  components, so effectively all of the delta lands on the room page. **This is the first bundle
+  measurement in the repo's history** — there is still no baseline and nothing enforces one.
 
 ---
 

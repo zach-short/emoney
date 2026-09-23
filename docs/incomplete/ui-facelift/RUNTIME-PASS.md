@@ -280,3 +280,94 @@ Wait two seconds, then measure.
   the loader's window is ~500ms and no walk in this session landed inside it. The yellow count in
   R3.4 would have caught it had it been on screen during those reads, which is weaker than a
   sighting. Worth ten seconds on a slow connection.
+
+---
+
+## Phase 4 — Popovers F1 and F2, at `lg`. Walked 2026-09-23.
+
+Walked from a dev server started **directly from this worktree** with
+`NEXT_PUBLIC_API_URL=https://api.emoney.club NEXT_PUBLIC_API_URL_NO_PREFIX=api.emoney.club
+npx next dev --port 3000`, against the production API, in the browser pane. **Port 3000 is not
+optional** — the backend's CORS allowlist names `http://localhost:3000` literally
+(`backend/main.go:22-26`), and a first attempt on 3200 was refused on every request.
+No file in the primary checkout was touched this time; see `PLAN.md` Phase 4's as-built.
+
+**Fixture.** The same throwaway production room **`UIP1CHK`** Phases 1-3 used. This phase changed
+its data, through the app's own flows: **P2Check now owns Oriental Avenue, Vermont Avenue and
+Connecticut Avenue** (bought from the bank, $1,500 → $1,180) and has **one PENDING offer to
+Banker** offering Oriental Avenue for nothing. Banker is $1,850 with no deeds. **All of this is
+real data in the production database — delete the room when convenient.** The two player ids are
+`6ab2f0536bc35e3f6aa5f8d1` (Banker) and `6ab318a36bc35e3f6aa5f910` (P2Check); the walk switched
+between them with `localStorage.setItem('room_UIP1CHK_playerId', <id>)`.
+
+### R4.1 — A holding's deeds open in place, over the room. **Verified.**
+- **Where.** ≥`lg` (walked 1280×900), a room with another player who owns deeds. Click that
+  player's **"Properties N"** row. Do not open any drawer first.
+- **Right answer.** A glass panel with the deeds on it as paper, the room still readable behind,
+  in **one** interaction. Verified 2026-09-23: two deeds side by side (measured `left: 566` and
+  `left: 838`, same `top: 442`), the third wrapped and centred; panel `rgba(0, 0, 0, 0.55)` +
+  `blur(12px)`; capped at Radix's own `--radix-popover-content-available-height: 463.5px` and
+  scrolling, `bottom: 888` inside a 900px viewport. Screenshot taken.
+
+### R4.2 — A deed named in an offer opens its terms. **Verified. This is the one with no
+previous path at all.**
+- **Where.** ≥`lg`. Your own card → name bar → **Your offers** → an offer that names a property.
+  Click the property name (dotted underline).
+- **Right answer.** The paper deed floats over the **still-open** drawer, anchored under the name.
+  Verified 2026-09-23 on the P2Check → Banker offer: deed visible, drawer `data-state: "open"`,
+  height 810. The popover surface is transparent (`rgba(0, 0, 0, 0)`, `backdrop-filter: none`,
+  `padding: 0`, `border: 0`) and the deed is `rgb(255, 255, 255)` — paper, not glass (BD-15).
+  Screenshot taken.
+
+### R4.3 — The `overlay` step is painted exactly once. **Verified — it was twice, and was fixed.**
+- **Where.** Same as R4.2, on the single-deed popover.
+- **Right answer.** `box-shadow` = `rgba(255, 255, 255, 0.09) 0 1px 0 inset,
+  rgba(0, 0, 0, 0.75) 0 8px 24px -6px` on the surface, and `none` on the deed. It first measured
+  the same shadow on **both**, on an identical rectangle `[343, 300, 256, 371]`, because
+  `cn()`'s `twMerge` does not recognise the custom `shadow-overlay` key and `shadow-none` did not
+  cancel it. **Worth re-checking after any future `shadow-*` override anywhere in this app.**
+
+### R4.4 — Player at a glance, on another player's card. **Verified.**
+- **Where.** ≥`lg`. Click another player's **balance figure**.
+- **Right answer.** Their name, no Banker badge if they are not the banker, Balance, Properties,
+  and **"Offers between you"** with the count of offers pending in either direction between you
+  two. Verified 2026-09-23 on P2Check: `$1,180`, `3`, `Offers between you 1`.
+
+### R4.5 — Player at a glance, on your own card, and the banker badge. **Verified.**
+- **Where.** ≥`lg`. Click **your own** balance figure, as a banker.
+- **Right answer.** A **"Banker"** pill beside your name — *the fact that rendered nowhere in the
+  app before this phase* — and **"Offers waiting on you"**, matching the `N offer` badge on your
+  own name bar. Verified 2026-09-23: `Banker`, `$1,850`, `0`, `Offers waiting on you 1`, against a
+  name bar reading `1 offer`. Panel measured `rgba(0, 0, 0, 0.55)` + `blur(12px)`, border
+  `1px rgb(228, 228, 231)`. Screenshot taken.
+
+### R4.6 — Below `lg` nothing changed, and nothing new is focusable. **Verified by measurement.**
+- **Where.** 375×812. The room, and menu → Bank's Properties → a colour group → a deed.
+- **Right answer.** The drawer path behaves exactly as before — verified 2026-09-23 through to
+  St. James Place's rent ladder in the horizontal strip. And measured at 375px: every popover
+  trigger computes `display: none` (so it is **not in the tab order**, which is why they are two
+  renderings rather than one disabled control), every drawer trigger `display: flex`, the balance
+  is a `<p>` with its `<button>` twin unpainted, and a deed named in an offer is a plain
+  `<span>` with `text-decoration: none`.
+
+### R4.7 — The bank's own four-interaction path. **Verified UNCHANGED — and that is by decision,
+not an oversight.**
+- **Where.** Any width. Menu → Bank's Properties → colour group → scroll.
+- **Right answer.** Exactly what §1.6 measured: four interactions inside a sheet. Zach excluded
+  the navbar from F1 (`PLAN.md` BD-13) because that row sits inside a `DrawerContent`. **So this
+  phase must not be described as turning four interactions into one** — it did that for a
+  holding and for a deed inside an offer, neither of which is this path.
+
+### R4.8 — The popover on a real touch device. **NOT WALKED.**
+- **Where.** A tablet or a laptop with a touchscreen, at ≥`lg`.
+- **Right answer.** D6's whole hedge is that popovers are a mouse idiom and the `lg` gate keeps
+  them off phones — but **a tablet is ≥`lg` and is touch**. Nothing in this walk used a real
+  touch input; the browser pane sends mouse events. Open a deed popover on a tablet and check it
+  can be dismissed by tapping outside without mis-tapping a card control behind it. This is the
+  nearest thing to a gap D6's stated cost leaves behind.
+
+### R4.9 — Bundle weight on a mid-range phone. **NOT WALKED, and it is the standing hazard.**
+- **Where.** The room page on a real mid-range Android over a slow connection.
+- **Right answer.** +23,586 B gzipped is measured (`PLAN.md` Phase 4 *watch for*) but its effect
+  on time-to-interactive is not. This joins R3.3's unmeasured scrim blur as the second thing this
+  work has added to the room page that no device has judged.

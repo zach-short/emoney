@@ -149,6 +149,9 @@ const PlayerCard = ({
               onKickPlayer={onKickPlayer}
               allPlayers={allPlayers}
               roomId={roomId}
+              // F2's glance popover counts the offers pending between these two
+              // players (D6); the card face itself does not read them.
+              offers={offers}
             />
           </div>
         </div>

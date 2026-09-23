@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Offer, OfferNoID, Player, Property, Trade } from "@/types/schema";
 import { RespondOfferPayload } from "@/types/payloads";
 import { josephinBold } from "@/components/ui/fonts";
+import { DeedPopover } from "@/components/property/deed-popover";
 import MakeOffer from "./make-offer";
 
 // Every user-facing string in one place. Warm register, matching the kick
@@ -36,19 +37,62 @@ const copy = {
   someone: "Someone",
 };
 
+// A deed named inside an offer. Below `lg` it is the plain text it always was;
+// at `lg` it is F1's popover trigger (D6) -- and this is F1's strongest case,
+// because an offer names deeds whose terms are otherwise unreachable from here.
+// There is no path at all from an offer to a rent ladder today.
+//
+// Two renderings rather than one element that stops responding below `lg`, so
+// that a phone never has a focusable control in its tab order that does
+// nothing -- the mistake `property/cards/card-container.tsx` documents.
+const DeedName = ({ deed }: { deed: Property }) => (
+  <>
+    <span className={`lg:hidden`}>{deed.name}</span>
+    <DeedPopover property={deed}>
+      <button
+        type="button"
+        className={`hidden underline decoration-dotted underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:inline`}
+      >
+        {deed.name}
+      </button>
+    </DeedPopover>
+  </>
+);
+
 // One side of a trade as prose, from the same deed list every card already
 // carries: "Baltic Avenue and $200", "$200", "Baltic Avenue", or "nothing".
 // The same shape as `sideDescription` in `backend/websocket/offers.go`, which
 // writes the settled record; a deed not found in the room reads as "a
 // property" there too.
+//
+// Nodes rather than one joined string as of 2026-09-23, so each resolved deed
+// can carry F1's trigger. The prose it builds is unchanged, including the
+// `$${amount}` form: that mirrors `sideDescription` on the Go side, which
+// writes the settled record, so it is deliberately NOT routed through
+// `formatMoney()` here. Raised separately instead.
 const describeSide = (side: Trade, deeds: Map<string, Property>) => {
-  const parts = (side.properties ?? []).map(
-    (id) => deeds.get(id)?.name ?? "a property"
-  );
-  if ((side.amount ?? 0) > 0) parts.push(`$${side.amount}`);
+  const parts: { key: string; node: React.ReactNode }[] = (
+    side.properties ?? []
+  ).map((id) => {
+    const deed = deeds.get(id);
+    return { key: id, node: deed ? <DeedName deed={deed} /> : "a property" };
+  });
+  if ((side.amount ?? 0) > 0)
+    parts.push({ key: "amount", node: `$${side.amount}` });
   if (parts.length === 0) return copy.nothing;
-  if (parts.length === 1) return parts[0];
-  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  return (
+    <>
+      {parts.map((part, index) => (
+        // Keyed on the deed id, never on position (PLAN.md section 5): every
+        // refetch replaces the room object whole, so these arrays are rebuilt
+        // with new identities on every socket message.
+        <Fragment key={part.key}>
+          {index > 0 && (index === parts.length - 1 ? " and " : ", ")}
+          {part.node}
+        </Fragment>
+      ))}
+    </>
+  );
 };
 
 const ROW = `text-base`;

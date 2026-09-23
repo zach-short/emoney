@@ -356,6 +356,53 @@ one feature**, and that roughly doubles F1's cost. That trade is made here, deli
 the `lg`-first ordering as the hedge: the drawer path already exists and works, so the popover
 is additive rather than a replacement.
 
+**As built, 2026-09-23 — Phase 4 (`PLAN.md`).** The decision stands. Two of its premises did not,
+and both went to Zach as questions rather than being resolved in the build.
+
+**"A property's name anywhere" had almost nowhere to attach — this decision's own worked example
+is the exception, not the rule.** §1.6 measured the bank's rent-ladder path and this decision
+generalised from it to "the bank list, a player's holdings, an offer's contents". Grepped
+2026-09-23: a property name renders in **five** places and **three are the deed itself**
+(`common-card.tsx:63`, `utility-card.tsx:18`, `railroad-card.tsx:18`), which already shows the
+terms. The two bare-name sites are `offers-inbox.tsx:45` and `purchase-properties-bank.tsx:103`,
+and the second sits inside the same drawer *after* the deed. **Zach's call (`PLAN.md` BD-13): the
+player card's "Properties N" row at ≥`lg`, and each deed named in an offer.** The navbar's "Bank's
+Properties" was excluded — it lives inside a `DrawerContent`, so a popover there would float over
+an open sheet. **The consequence to know: the four-interaction path §1.6 measured is unchanged.**
+What F1 actually bought is one interaction to another player's holding, and one interaction to a
+deed inside an offer, which previously had **no path at all**. That last one is the stronger case
+and this document did not see it.
+
+**The line between reference and action turned out to be the load-bearing one.** Your own
+Properties row keeps its drawer at every width, because it opens `ManageProperties` — mortgaging
+and house-building. That is the same argument this decision uses to park F3, applied one level
+down: reference gets a popover, action keeps its sheet. Another player's row was *already* a
+read-only deed browser (settled 2026-09-16), so it was the only half that could move.
+
+**F2 shipped thin, because the card face already showed half of it.** Balance and property count
+are both on the card face today; of the other two facts, **`isBanker` rendered nowhere in the
+entire app** (grepped 2026-09-23) and a *total* pending-offer count for another player is not on
+the client at all — `offers` carries only the current player's. **Zach's call (`PLAN.md` BD-14):**
+banker status plus offers pending *between the two of you*, with the two visible figures restated.
+The label names which count it is, rather than implying one the client cannot know. The refused
+alternative was dropping the popover for a permanent banker mark, which would have shown that fact
+at every width.
+
+**The deed stays paper inside the popover, which D4 required and Phase 4's own scope item 5
+contradicted.** Item 5 said popover surfaces are glass; D4 exempts the deed by name. **Zach's call
+(`PLAN.md` BD-15):** for a single deed the glass skin comes off and the paper deed *is* the
+surface; for a holding, the glass panel is the surface and the deeds sit on it as paper. **The
+count stays at four glass surfaces** and the deed is never glassed, which is the wording that
+matters in D4.
+
+**No motion was added** (`PLAN.md` BD-16): the stock popover's four animation classes would have
+put unguarded movement in the tree before Phase 5 builds the reduced-motion gate, and Phase 6 owns
+panel transitions.
+
+**The cost this decision accepted was paid and is now a number.** `@radix-ui/react-popover@1.1.23`
+costs **+23,586 B gzipped (+8.3%)** of client JS, all of it effectively on the room page —
+the first bundle measurement in this repo's history (§1.9 noted none existed).
+
 ### D7 — This work splits into two lanes against board row 29. Ratified 2026-09-22. (§6.7 → §5)
 
 - **Lane 1 — theme substrate, type, materials** (§3-A, §3-C, §3-D). **Zero collision with board
