@@ -716,7 +716,7 @@ literals it has to find, not by the number of surfaces the decision names.
 
 ### Phase 4 — Popovers F1 and F2, at `lg`
 
-**Status: `BUILT` 2026-09-23, commit `<pending — Zach commits>`. Lane 1. Driver: Opus 5 (the
+**Status: `BUILT` 2026-09-23, commit `dd63b15` — 11 files, +623/-14. Lane 1. Driver: Opus 5 (the
 session checked its own model against this table before reading anything). Waits on: Phases 1 and
 3, both landed.** Implements **D6**. Carries **BD-1**; took **BD-13**…**BD-16** while building,
 all in §1 with their reversals. Frontend only; nothing in `backend/` was touched.
