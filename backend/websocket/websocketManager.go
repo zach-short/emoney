@@ -1181,9 +1181,10 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 }
 
 // handleKickPlayer removes a player from a live game. One banker action does
-// four things: it disposes of the estate the way the banker chose, marks the
-// player gone, hands the banker role on if the target held it, and force-closes
-// the target's socket.
+// five things: it disposes of the estate the way the banker chose, marks the
+// player gone, hands the banker role on if the target held it, closes every
+// trade offer still pending to or from them, and force-closes the target's
+// socket.
 //
 // The decisions this implements, so a later reader does not re-derive them from
 // the code (docs/incomplete/kick-player/DESIGN.md):
@@ -1362,6 +1363,11 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 	defer session.EndSession(context.Background())
 
 	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+		// Taken inside the callback rather than above it, so a retry after a
+		// write conflict stamps its own attempt - the reset-on-entry
+		// discipline freeParking keeps for its captured values.
+		now := time.Now()
+
 		if disposition == "BANK" {
 			// manager.HandlePropertySaleMortgage's SELL case at
 			// manager/propertyManager.go:53 writes {playerId: nil,
@@ -1463,6 +1469,42 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 			if result.MatchedCount == 0 {
 				return nil, errors.New("the successor is no longer in this room")
 			}
+		}
+
+		// The removed player's pending offers, in either direction, close with
+		// the kick. None of them can ever settle - tradePreconditions refuses
+		// an inactive player at ACCEPT (websocket/offers.go) - so left PENDING
+		// they sit in the other player's inbox as a trade that cannot happen,
+		// until that player declines or withdraws it by hand. DENIED is the
+		// state the four-state contract already gives a trade one side walked
+		// away from (models.OfferDenied: a sender's withdrawal lands there
+		// too); there is deliberately no fifth state for this.
+		//
+		// Inside the transaction, not after it, for the reason the kick is one
+		// transaction at all: a cleanup that ran after the commit could fail
+		// on its own and leave the kick done with its offers still open. The
+		// filter is GetPendingOffers' (controllers/offerControllers.go), so it
+		// runs on the indexes EnsureOfferIndexes builds for that read. Matching
+		// nothing is the normal case, so the count is not checked.
+		//
+		// Being a write to the offer documents, this also puts the kick in
+		// write conflict with a concurrent ACCEPT of one of them, which pins
+		// the same document to PENDING. Whichever commits second retries and
+		// sees the first: a trade settled just before the kick stays settled,
+		// and an accept after it finds DENIED and acceptRejection refuses it.
+		if _, err := config.DB.Collection("Offer").UpdateMany(
+			ctx,
+			bson.M{
+				"roomId": roomObjID,
+				"status": models.OfferPending,
+				"$or": []bson.M{
+					{"fromPlayerId": targetObjID},
+					{"toPlayerId": targetObjID},
+				},
+			},
+			bson.M{"$set": bson.M{"status": models.OfferDenied, "updatedAt": now}},
+		); err != nil {
+			return nil, fmt.Errorf("failed to close the removed player's offers: %w", err)
 		}
 
 		return nil, nil
