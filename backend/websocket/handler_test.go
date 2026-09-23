@@ -21,8 +21,9 @@ import (
 // channel.
 //
 // It runs against the package-level Manager - the one global HandleWebSocket
-// itself uses. No other test in this package touches Manager, so a room code
-// unique to this test is isolation enough.
+// itself uses. read_deadline_test.go's tests do too (board row 31); a room
+// code unique to each test is what keeps them isolated, not exclusive use of
+// Manager.
 
 // waitForRoomSize polls room's client count until it equals want, or fails
 // the test at timeout. Used instead of a fixed sleep to synchronize with
