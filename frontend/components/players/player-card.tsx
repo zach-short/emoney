@@ -13,6 +13,7 @@ import {
 import {
   Drawer,
   DrawerContent,
+  DrawerDescription,
   DrawerTitle,
   DrawerTrigger,
 } from "../ui/drawer";
@@ -117,6 +118,11 @@ const PlayerCard = ({
                 <DrawerTitle className={`hidden`}>
                   {isSelf ? "Your offers" : "Make an offer"}
                 </DrawerTitle>
+                <DrawerDescription className={`sr-only`}>
+                  {isSelf
+                    ? "Review trade offers sent to you, and respond to each."
+                    : `Propose a trade with ${player?.name}: properties, cash, or both.`}
+                </DrawerDescription>
                 {isSelf ? (
                   <OffersInbox
                     offers={offers}

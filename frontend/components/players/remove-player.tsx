@@ -4,6 +4,7 @@ import { KickPlayerPayload } from "@/types/payloads";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
@@ -142,7 +143,11 @@ const RemovePlayer = ({
             <DialogTitle>{copy.title}</DialogTitle>
           </DialogHeader>
 
-          <p className={`${josephinNormal.className} text-sm`}>{copy.body}</p>
+          <DialogDescription
+            className={`${josephinNormal.className} text-sm text-black`}
+          >
+            {copy.body}
+          </DialogDescription>
 
           <div className={`flex flex-col gap-y-2`}>
             <p className={`text-sm`}>{copy.dispositionHeading}</p>

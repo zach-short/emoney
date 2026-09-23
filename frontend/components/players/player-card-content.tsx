@@ -2,6 +2,7 @@ import { Player } from "@/types/schema";
 import {
   Drawer,
   DrawerContent,
+  DrawerDescription,
   DrawerTitle,
   DrawerTrigger,
 } from "../ui/drawer";
@@ -12,7 +13,7 @@ import { josephinBold, josephinNormal } from "../ui/fonts";
 import PlayerTags from "./player-tags";
 import ManageProperties from "./manage-properties";
 import { BankerTransactionPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { CiCircleMinus, CiCirclePlus } from "react-icons/ci";
@@ -129,6 +130,11 @@ const PlayerDetails = ({
                 {dialogState === "add" ? "Add Money to" : "Remove Money from"}{" "}
                 {player?.name}
               </DialogTitle>
+              <DialogDescription className={`sr-only`}>
+                Enter an amount to{" "}
+                {dialogState === "add" ? "add to" : "remove from"}{" "}
+                {player?.name}&apos;s balance as the banker.
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="flex items-center gap-4">
@@ -183,6 +189,10 @@ const PlayerDetails = ({
             <DrawerTitle className={`text-black select-none`}>
               {player?.id}&apos; Properties
             </DrawerTitle>
+            <DrawerDescription className={`sr-only`}>
+              {player?.name}&apos;s properties, with houses, mortgages, and
+              sale controls for the banker.
+            </DrawerDescription>
             <ManageProperties
               onManageProperties={onManageProperties}
               player={player}
@@ -223,6 +233,9 @@ const PlayerDetails = ({
               <DrawerTitle className={`text-black`}>
                 Choose Payment Type
               </DrawerTitle>
+              <DrawerDescription className={`sr-only`}>
+                Send money to {player?.name} or request money from them.
+              </DrawerDescription>
               <SendReqToggle onToggle={(newType) => setTransferType(newType)} />
               <PayRequestRent
                 properties={getPropertiesToShow()}

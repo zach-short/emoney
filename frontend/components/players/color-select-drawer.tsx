@@ -4,6 +4,7 @@ import {
   Drawer,
   DrawerClose,
   DrawerContent,
+  DrawerDescription,
   DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
@@ -92,6 +93,9 @@ export function ColorSelect({ onColorSelect }: ColorSelectProps) {
           {/* `hidden` took the title out of the accessibility tree too, leaving
               the sheet unnamed. sr-only keeps it for screen readers. */}
           <DrawerTitle className={`sr-only`}>Select Color</DrawerTitle>
+          <DrawerDescription className={`sr-only`}>
+            Choose a color for this player.
+          </DrawerDescription>
         </DrawerHeader>
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
           {colors.map((color, index) => (

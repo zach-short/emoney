@@ -1,9 +1,13 @@
-# SCOPE — room state sync: what the room page does with a socket message
+# DESIGN — room state sync: what the room page does with a socket message
 
-**Status: SCOPING.** Written 2026-09-17 by a Fable 5.1 session (the tier board row 29 names;
-checked against the running model before anything was read). This is board row 29 entering
-`docs/AGENT-PRACTICES.md` Stage 2 as an audit (§2.4): §1 is the Stage 1 output, the rest
-proposes and decides nothing. GATE 1 is §6.
+**Status: RATIFIED 2026-09-23.** Was `SCOPE.md`, `Status: SCOPING`, written 2026-09-17 by a
+Fable 5.1 session (the tier board row 29 names; checked against the running model before
+anything was read). Renamed on GATE 1 ratification per `docs/AGENT-PRACTICES.md` §2.2 Stage 3 —
+git records the transition (the file was committed as `SCOPE.md` in `89e470b`, 2026-09-22).
+§1–§5 are unedited Stage 1/2 output; §6 below is rewritten from "Open questions" into `D1`–`D5`,
+the ratified decisions, each with its defense, dated. GATE 1 ran in chat 2026-09-23 — one batched
+question, four parts, every option carrying its own recommendation (R6, R7) — and every answer
+matched the recommendation.
 
 **What this is about.** `frontend/app/room/[code]/page.tsx` answers every inbound websocket
 message the same way: toast the sentence, then `GET /rooms/:code/players` again, and for four
@@ -368,27 +372,62 @@ constant each, not a literal typed twice.
 
 ---
 
-## 6. Open questions — the GATE 1 batch
+## 6. Decisions — ratified 2026-09-23
 
-Every option above carries its recommendation; the answer to any of these may be no.
+Asked as one batched question, four parts, in chat (R6); every option carried its own
+recommendation (R7 for the copy); Zach's answer matched the recommendation on all four.
+`SCOPE.md`'s original question numbering is kept alongside each `D`-id so a cross-reference from
+elsewhere in this doc or from `HANDOFF.md` still resolves.
 
-1. **What is the row for?** If a room has ever felt slow or a screen has gone stale in play, say
-   so — that is the only evidence that would move C ahead of B. **Recommended reading:** hygiene
-   with two real client-side bugs attached (§1.2); B closes both and no measurement exists for
-   more.
-2. **Ratify the split:** B now as its own board row (Default, client-only, two files); E as a
-   companion row (Mechanical/Default, `controllers/playerControllers.go`); C's server half folded
-   into F4's scope rather than built standalone, with §3-C's commit-order question decided
-   there. Row 29 closes as `DONE` on B + E with C recorded as the reserved seam. **Recommended:
-   yes.**
-3. **Should `PLAYER_LEFT`, and `PLAYER_JOINED` for an already-known player, stop refetching the
-   room?** They change no document today. The cost of saying yes is that a future presence
-   feature has to put its own refetch back. **Recommended: yes**, with the explicit resync on
-   `onopen` (§4) so a client's own reconnect is never the case that gets skipped.
-4. **On a failed refetch, keep the last good room and toast, instead of the full-screen error?**
-   **Recommended: yes.** Copy, per R7 — plain: *"Couldn't refresh the room. Retrying…"*; warm:
-   *"Lost touch with the room for a second — trying again."*; terse: *"Room refresh failed —
-   retrying."*
-5. **Confirm E is wanted as a row at all.** It is the largest lever on server cost and it is in a
-   file this row does not own. **Recommended: yes**, Mechanical tier, after row 23's driver
-   migration lands since it rewrites the same controller.
+**D1 — This is hygiene, not an incident.** (was Q1) No room has been observed to feel slow or go
+stale; the case for acting rests on §1.2's two real client-side bugs (out-of-order refetch
+responses; one transient failure blanking the whole screen to `Fallback`) and §1.3's unmeasured
+scaling concern, not on anything seen in play. **Defense:** this is what keeps B ahead of C — C
+earns its cost from a measured problem B cannot fix, and none exists yet. **Supersession:** if a
+room is later seen stale or slow in real play, that evidence supersedes D1 and reopens the
+question of moving C ahead of F4.
+
+**D2 — The split is ratified: B now, E as a companion row, C folded into F4.** (was Q2) Board row
+29 closes as `DONE — DESIGN.md, ratified 2026-09-23` once B is built (Stage 4/5 below), not on
+ratification alone — ratifying a design is not shipping it. **B** ships as its own board item,
+Default tier, client-only, two files (`page.tsx`, `use-public-fetch.ts`). **E** (§3) is raised as
+its own board row, Mechanical/Default tier, `controllers/playerControllers.go` only, sequenced
+after row 23's driver migration lands since both rewrite the same controller. **C**'s server half
+is not designed standalone; TRIAGE F4 inherits it, and §3-C's commit-order question (a per-room
+mutex vs. transaction-scoped `seq` vs. per-document versions) is decided there, not here.
+**Defense:** avoids designing the structured-event record twice in two places by two sessions,
+which is the argument that decided this over building C directly. **Supersession:** none; this is
+the frozen split unless F4 itself reopens it.
+
+**D3 — `PLAYER_LEFT` and an already-known `PLAYER_JOINED` stop refetching the room.** (was Q3)
+Neither changes any document today (§1.1). Paired with an **explicit** refetch on the socket's own
+`onopen`, after `JOIN` — so a client's own reconnect (§1.4 item 1) becomes a stated rule instead of
+an accident that would silently break the day nobody broadcasts joins anymore. **Defense:** removes
+the no-op share of the fan-out without touching the one place a skip would actually cost
+correctness. **Supersession:** a future presence feature that needs to react to `PLAYER_LEFT` /
+known-`PLAYER_JOINED` puts its own refetch or its own handling back — this decision does not bind
+that feature, it only removes today's default.
+
+**D4 — A failed refetch keeps the last good room, toasts, and retries; the full-screen error stays
+for the initial load only.** (was Q4) Retry shape is dial §4's default: 3 attempts, 1 s / 2 s / 4 s,
+then wait for the next message. **Copy — plain, ratified:** *"Couldn't refresh the room.
+Retrying…"* The warm and terse variants are recorded in §4's dial table and are not used.
+**Defense:** closes §1.2's silent screen-blanking failure mode without a wire change.
+**Supersession:** none.
+
+**D5 — E is wanted as a row.** (was Q5) Folded into D2 above rather than kept separate — same
+ratification, same turn.
+
+### Rules that survive unchanged
+
+Listed so a later build phase does not "helpfully" relitigate them:
+
+- **Every backstop in §1.4 stays exactly as built**, except item 1 (reconnect), which D3 makes
+  explicit rather than removing. Kick's `isActive` partial payload, trades' `refetchOffers` on
+  every frame, the auction's unknown-lot fallback, shipping-ahead-of-deploy via refetch-on-unknown,
+  and the out-of-commit-order tolerance for `BID_PLACED` are all untouched.
+- **No wire contract changes.** B is client-only; no Go file is touched by this decision.
+- **`BID_PLACED`'s overlay-and-refetch-fallback shape (§1.6) stays the house precedent** for any
+  future payload-driven surface, including whatever F4 eventually builds for C.
+- **The event-history pane keeps reading only from the `/players` refetch** until E caps it or F4
+  gives it its own payload — this decision does not touch it either way.

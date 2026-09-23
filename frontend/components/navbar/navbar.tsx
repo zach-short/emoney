@@ -4,6 +4,7 @@ import { EventHistory, Player, Property } from "@/types/schema";
 import {
   Drawer,
   DrawerContent,
+  DrawerDescription,
   DrawerTitle,
   DrawerTrigger,
 } from "../ui/drawer";
@@ -69,6 +70,10 @@ const Navbar = ({
           className={`${josephinNormal.className} h-[80vh] bg-black border-[1px] px-3 text-xl `}
         >
           <DrawerTitle className={`text-black`}>Menu</DrawerTitle>
+          <DrawerDescription className={`sr-only`}>
+            Room menu: browse properties for sale, record free parking, or
+            view the event history.
+          </DrawerDescription>
 
           <ul className={`flex flex-col gap-1 h-[75vh] relative`}>
             {(showProperties || showFreeParking || showEvents) && (
