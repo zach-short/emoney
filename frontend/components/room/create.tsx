@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { josephinBold } from "@/components/ui/fonts";
 import { ColorSelect } from "../players/color-select-drawer";
-import CustomLink from "../ui/cusotm-link";
+import CustomLink from "../ui/custom-link";
 import { Slider } from "../ui/slider";
 import { playerStore } from "@/lib/utils/playerHelpers";
 import { usePublicAction } from "@/hooks/use-public-fetch";
@@ -37,7 +37,7 @@ const CreateRoomForm = () => {
   const { execute: createRoomExecute, loading: creating } = usePublicAction(
     roomApi.create,
     {
-      onSuccess(data: { roomCode: string; playerId: string }) {
+      onSuccess(data) {
         playerStore.setPlayerIdForRoom(data.roomCode, data.playerId);
         router.push(`/room/${data.roomCode}`);
       },
@@ -52,7 +52,7 @@ const CreateRoomForm = () => {
 
   const { execute: checkExistingRoomExecute, loading: checkingExistingRoom } =
     usePublicAction(roomApi.checkExistingRoom, {
-      onSuccess(data: { exists: boolean }) {
+      onSuccess(data) {
         console.log(
           data,
           "data in /emoney-frontend/components/room/create.tsx",

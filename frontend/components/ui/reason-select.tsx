@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/drawer";
 import { sulpherBold } from "./fonts";
 import { useState } from "react";
+import { DRAWER_HEIGHT_COMPACT } from "./drawer-sizes";
 
 const reasons = [
   { name: "Transfer", value: "transfer" },
@@ -48,7 +49,7 @@ export function ReasonSelect({
         </button>
       </DrawerTrigger>
       <DrawerContent
-        className={`${sulpherBold.className} bg-black text-white h-[70vh]`}
+        className={`${sulpherBold.className} bg-black text-white ${DRAWER_HEIGHT_COMPACT}`}
       >
         <DrawerHeader>
           <DrawerTitle>Select Reason</DrawerTitle>

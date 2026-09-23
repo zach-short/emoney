@@ -1,4 +1,4 @@
-import CustomLink from "@/components/ui/cusotm-link";
+import CustomLink from "@/components/ui/custom-link";
 import InstallButton from "@/components/ui/install-app-button";
 import { IoDiceOutline } from "react-icons/io5";
 import { GrHelpBook } from "react-icons/gr";

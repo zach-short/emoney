@@ -1,6 +1,6 @@
 "use client";
 import Button from "@/components/ui/button-custom";
-import CustomLink from "@/components/ui/cusotm-link";
+import CustomLink from "@/components/ui/custom-link";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useIsIOS, useIsStandalone } from "@/hooks/use-browser-env";
