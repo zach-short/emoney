@@ -418,6 +418,18 @@ Retrying…"* The warm and terse variants are recorded in §4's dial table and a
 **D5 — E is wanted as a row.** (was Q5) Folded into D2 above rather than kept separate — same
 ratification, same turn.
 
+**D6 — The explicit `onopen` reconnect resync also refetches properties, not just players and
+offers.** Ratified 2026-09-23, asked separately from D1–D5 because Stage 4 (`PLAN.md`) surfaced
+it as new scope: `PLAN.md` §0.17 found that on `main`, `PLAYER_JOINED`'s echo-triggered refetch
+never included properties (`PLAYER_JOINED` was never in the `refetchProperties` list,
+`page.tsx:236`), so a client that reconnects mid-game after missing a purchase keeps a stale
+Bank's Properties list until the next property-changing event. **Defense:** D3 only named
+*whether* to make the resync explicit, not *what* it fetches; closing this gap costs nothing new
+— it is one more resource on an already-firing refetch — and leaves it not silently narrower
+than what the accidental echo used to cover for everything except properties. **Supersession:**
+none; this sets dial 3.7 (`PLAN.md` §3) to "players, properties and offers," pinned, no further
+latitude for the build.
+
 ### Rules that survive unchanged
 
 Listed so a later build phase does not "helpfully" relitigate them:
