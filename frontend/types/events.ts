@@ -69,3 +69,48 @@ export interface OfferAccepted {
   fromPlayerId: string;
   toPlayerId: string;
 }
+
+// The three the auction broadcasts (`backend/websocket/websocketManager.go`:
+// handleKickPlayer's AUCTION arm, handlePlaceBid, handleCloseAuction). Every
+// one of them carries `notification`, the prose the room reads; the rest of
+// each payload is what the panel needs in order to react without waiting for a
+// refetch.
+
+// Raised by an AUCTION kick, once, after PLAYER_KICKED and only when the
+// removed player actually held a deed. `lotCount` is how many deeds the whole
+// auction will run through -- it is the only place that total is ever stated,
+// and it is not on the Room document, so a client that reloads mid-auction
+// cannot recover it. Nothing in the panel is allowed to depend on it.
+export interface AuctionStarted {
+  type: "AUCTION_STARTED";
+  notification: string;
+  propertyId: string;
+  kickedPlayerId: string;
+  lotCount: number;
+}
+
+// Raised by every accepted bid. This is the one broadcast the room handler
+// must NOT toast and must NOT refetch on (PLAN.md section 3, "Toast per bid"):
+// a lot can take twenty bids and each one reaches every client. The payload
+// carries the whole of the new high bid, which is what makes the no-refetch
+// path possible -- the panel applies it directly.
+export interface BidPlaced {
+  type: "BID_PLACED";
+  notification: string;
+  propertyId: string;
+  bidderId: string;
+  amount: number;
+}
+
+// Raised by the Banker's hammer. `winnerId` and `amount` are present only when
+// the lot actually sold -- the three other outcomes (nobody bid, the winner
+// could not cover it, the winner has since been removed) all send the deed to
+// the Bank and omit both keys, so their absence is the wire's way of saying
+// "no money moved". The notification says which of the three happened.
+export interface AuctionLotClosed {
+  type: "AUCTION_LOT_CLOSED";
+  notification: string;
+  propertyId: string;
+  winnerId?: string;
+  amount?: number;
+}

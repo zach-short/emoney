@@ -7,7 +7,9 @@ export type WebSocketPayload =
   | FreeParkingPayload
   | KickPlayerPayload
   | CreateOfferPayload
-  | RespondOfferPayload;
+  | RespondOfferPayload
+  | PlaceBidPayload
+  | CloseAuctionPayload;
 
 export type TransferType =
   | "SEND"
@@ -120,4 +122,43 @@ export interface RespondOfferPayload {
   offerId: string;
   playerId: string;
   response: "ACCEPT" | "DENY" | "WITHDRAW";
+}
+
+// A raise on the open auction lot (`handlePlaceBid`).
+//
+// `amount` is a JSON number, not the string `TransferPayload` and
+// `FreeParkingPayload` send: those are strings because a keypad produces them,
+// and the server parses a bid with a whole-dollars check that refuses 120.9
+// rather than truncating it -- a truncated bid is a bid nobody made, and it is
+// the truncated figure that gets charged.
+//
+// `propertyId` names the lot being bid on and is required. It is what makes a
+// bid that arrives after the hammer fail instead of landing on the next deed:
+// a close advances the open lot, so the server's filter no longer matches.
+export interface PlaceBidPayload {
+  type: "PLACE_BID";
+  roomId: string;
+  propertyId: string;
+  bidderId: string;
+  amount: number;
+}
+
+// The Banker's hammer (`handleCloseAuction`). This is the only thing that ends
+// a lot -- there is no timer anywhere in the backend (D14).
+//
+// Both `propertyId` and `kickedPlayerId` are required, and together they are
+// the lot's identity. A property id alone identifies a deed, not an auction
+// lot, and the same deed can be the open lot of two different auctions; the
+// pair cannot repeat, because a player cannot be kicked twice. Sending the pair
+// the panel is actually displaying is what makes a stale screen say so instead
+// of hammering a deed the Banker was not looking at.
+export interface CloseAuctionPayload {
+  type: "CLOSE_AUCTION";
+  roomId: string;
+  // The Banker closing the lot. Named `playerId` on the wire, not `bankerId`:
+  // the server reads it and then checks the role, and this is the one
+  // server-side isBanker check in the product.
+  playerId: string;
+  propertyId: string;
+  kickedPlayerId: string;
 }

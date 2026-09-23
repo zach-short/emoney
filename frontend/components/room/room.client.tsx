@@ -19,6 +19,7 @@ import {
   RespondOfferPayload,
   TransferType,
 } from "@/types/payloads";
+import AuctionBar, { LiveBid } from "./auction-bar";
 
 const RoomView = ({
   currentPlayer,
@@ -35,6 +36,9 @@ const RoomView = ({
   offers,
   onCreateOffer,
   onRespondOffer,
+  liveBid,
+  onPlaceBid,
+  onCloseAuction,
 }: {
   otherPlayers: Player[];
   eventHistory: EventHistory[];
@@ -87,6 +91,9 @@ const RoomView = ({
     offerId: string,
     response: RespondOfferPayload["response"],
   ) => void;
+  liveBid: LiveBid | null;
+  onPlaceBid: (propertyId: string, amount: number) => void;
+  onCloseAuction: (propertyId: string, kickedPlayerId: string) => void;
 }) => {
   const allPlayers = [...otherPlayers, currentPlayer];
   return (
@@ -111,6 +118,18 @@ const RoomView = ({
             roomCode={room?.code}
           />
         </div>
+        {/* Inside the sticky header, below the title row, so a live auction
+            travels with it and pushes the cards down instead of covering the
+            bottom of one. Renders nothing when no auction is running. */}
+        <AuctionBar
+          room={room}
+          allPlayers={allPlayers}
+          availableProperties={availableProperties}
+          currentPlayer={currentPlayer}
+          liveBid={liveBid}
+          onPlaceBid={onPlaceBid}
+          onCloseAuction={onCloseAuction}
+        />
       </header>
       <div className="flex-1 flex items-center justify-center py-6">
         {/* Below `lg` this stays the swipe strip the phone layout wants. At

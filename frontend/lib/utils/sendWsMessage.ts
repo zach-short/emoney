@@ -15,7 +15,9 @@ const sendWebSocketMessage = (
     | "MANAGE_PROPERTIES"
     | "KICK_PLAYER"
     | "CREATE_OFFER"
-    | "RESPOND_OFFER",
+    | "RESPOND_OFFER"
+    | "PLACE_BID"
+    | "CLOSE_AUCTION",
   payload: WebSocketPayload
 ) => {
   if (ws?.readyState === WebSocket.OPEN) {
@@ -41,7 +43,9 @@ export const sendMessage = (
     | "MANAGE_PROPERTIES"
     | "KICK_PLAYER"
     | "CREATE_OFFER"
-    | "RESPOND_OFFER",
+    | "RESPOND_OFFER"
+    | "PLACE_BID"
+    | "CLOSE_AUCTION",
   payload: WebSocketPayload
 ) => {
   sendWebSocketMessage(ws, type, payload);
