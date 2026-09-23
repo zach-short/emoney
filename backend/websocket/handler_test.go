@@ -101,3 +101,49 @@ func TestHandleWebSocketSuppressesPlayerLeftForAConnThatNeverJoined(t *testing.T
 		// Nothing arrived - the guard suppressed PLAYER_LEFT.
 	}
 }
+
+// TestHandleWebSocketRepliesErrorForAnUnknownMessageType pins the switch's
+// default arm: a message.Type none of the other cases match used to be read
+// and silently dropped, so a frontend deployed ahead of the backend - or any
+// stale client sending a type this build does not know - got no answer at
+// all. The dial here is the sender's own conn, which is exactly where
+// handler.go's ERROR replies go (client.WriteJSON, not a room broadcast), so
+// reading straight off it is proof enough without wsPairs' second observer.
+func TestHandleWebSocketRepliesErrorForAnUnknownMessageType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const room = "UNKNOWN-TYPE"
+
+	router := gin.New()
+	router.GET("/ws/room/:code", HandleWebSocket)
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/ws/room/" + room
+	dialHeader := http.Header{"Origin": {"http://localhost:3000"}}
+	conn, _, err := websocket.DefaultDialer.Dial(url, dialHeader)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+
+	waitForRoomSize(t, room, 1, 2*time.Second)
+
+	if err := conn.WriteJSON(Message{Type: "NOT_A_THING", Payload: map[string]interface{}{}}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var reply Message
+	if err := conn.ReadJSON(&reply); err != nil {
+		t.Fatalf("read reply: %v", err)
+	}
+
+	if reply.Type != "ERROR" {
+		t.Fatalf("got message type %q, want ERROR", reply.Type)
+	}
+	text, ok := reply.Payload.(string)
+	const want = "unknown message type: NOT_A_THING"
+	if !ok || !strings.Contains(text, want) {
+		t.Fatalf("got payload %v, want it to contain %q", reply.Payload, want)
+	}
+}
