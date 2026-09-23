@@ -45,19 +45,32 @@ const OptionRow = ({
   onSelect: () => void;
   swatch?: string;
 }) => (
+  // The selection inverts, and that inversion is the whole of BD-4's debt.
+  // It used to be `bg-black text-white` selected against `text-black`
+  // unselected -- correct on the white card this dialog was written for, and
+  // invisible the moment the card went black. On a dark ground the selected
+  // row is the LIGHT plane: it is the one thing on the surface that should
+  // read as filled. Unselected keeps a dim hairline and the inherited
+  // foreground, so the rows are still a list rather than a row of buttons.
   <button
     type="button"
     onClick={onSelect}
     aria-pressed={selected}
     className={`flex w-full items-center gap-x-3 rounded-md border px-3 py-3 text-left text-base transition-colors
-      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black
-      ${selected ? "border-black bg-black text-white" : "border-neutral-300 text-black hover:bg-black/5"}`}
+      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white
+      ${
+        selected
+          ? "border-white bg-white text-black shadow-raised"
+          : "border-white/25 hover:bg-white/5"
+      }`}
   >
     {swatch && (
       <span
         aria-hidden
         style={{ backgroundColor: swatch }}
-        className={`h-4 w-4 shrink-0 rounded-full border border-black`}
+        className={`h-4 w-4 shrink-0 rounded-full border ${
+          selected ? "border-black" : "border-white/40"
+        }`}
       />
     )}
     <span>{label}</span>
@@ -134,21 +147,22 @@ const RemovePlayer = ({
       </button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        {/* Pinned light deliberately -- see player-tags.tsx. The option rows
-            below use border-neutral-300/text-black unselected and bg-black
-            text-white selected, so a black card erases both the copy and the
-            selection. Phase 3 restyles it and removes this bg-white. */}
+        {/* BD-4's second pin, cleared here. `OptionRow` above was inverted
+            for the dark ground first; this `bg-white text-black` came off
+            after (PLAN.md Phase 3 item 7). */}
         <DialogContent
-          className={`sm:max-w-[425px] bg-white text-black max-h-[85vh] overflow-y-auto`}
+          className={`sm:max-w-[425px] max-h-[85vh] overflow-y-auto`}
         >
           <DialogHeader>
             <DialogTitle>{copy.title}</DialogTitle>
           </DialogHeader>
 
-          <p className={`text-sm`}>{copy.body}</p>
+          <p className={`text-sm text-neutral-300`}>{copy.body}</p>
 
           <div className={`flex flex-col gap-y-2`}>
-            <p className={`text-sm`}>{copy.dispositionHeading}</p>
+            <p className={`text-sm text-neutral-300`}>
+              {copy.dispositionHeading}
+            </p>
             <OptionRow
               label={copy.bank}
               selected={disposition === "BANK"}
@@ -168,9 +182,11 @@ const RemovePlayer = ({
 
           {needsSuccessor && (
             <div className={`flex flex-col gap-y-2`}>
-              <p className={`text-sm`}>{copy.successorHeading}</p>
+              <p className={`text-sm text-neutral-300`}>
+                {copy.successorHeading}
+              </p>
               {successors.length === 0 ? (
-                <p className={`text-sm`}>
+                <p className={`text-sm text-neutral-300`}>
                   {copy.noSuccessors}
                 </p>
               ) : (

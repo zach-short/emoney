@@ -10,7 +10,7 @@ const DiceLoader = () => {
         <div className="bottom">4</div>
       </div>
       <p
-        className={`color !text-xl border-yellow-100 border h-12 w-[200px] justify-center flex items-center rounded-sm`}
+        className={`!text-xl border-neutral-600 border h-12 w-[200px] justify-center flex items-center rounded-sm`}
       >
         LOADING
       </p>

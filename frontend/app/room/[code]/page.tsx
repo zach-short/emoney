@@ -198,7 +198,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
         toast.error(text || "Something went wrong", {
           duration: 4000,
           position: "top-center",
-          className: `font-semibold text-xs text-center`,
+          className: `font-semibold text-sm text-center`,
         });
         return;
       }
@@ -207,7 +207,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
         duration: 4000,
         icon: getIconForType(message.type),
         position: "top-center",
-        className: `font-semibold text-xs text-center`,
+        className: `font-semibold text-sm text-center`,
       });
 
       // Every frame refetches the inbox, not only the offer ones: that is

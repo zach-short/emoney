@@ -251,9 +251,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
                 ))}
               </div>
               <button
-                className={`w-full p-2 font-semibold ${
-                  BUY ? "bg-red-500" : "bg-green-600"
-                }  rounded`}
+                className={`w-full p-2 font-semibold border border-border bg-white/[0.06] hover:bg-white/[0.12] transition-colors rounded shadow-raised disabled:opacity-50`}
                 disabled={currentHouses === initialHouses}
                 onClick={() => {
                   if (BUY && totalCost > player.balance) {
@@ -329,7 +327,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
             <div className="grid grid-cols-1 gap-2 py-2">
               {canMortgage && !property.isMortgaged && (
                 <button
-                  className="bg-yellow-600 text-white p-2 rounded text-sm"
+                  className="border border-border bg-white/[0.06] hover:bg-white/[0.12] transition-colors text-white p-2 rounded text-sm shadow-raised"
                   onClick={() => handleMortgage(property)}
                 >
                   Mortgage (
@@ -341,7 +339,7 @@ const ManageProperties = ({ player, currentPlayer, onManageProperties }: p) => {
               )}
               {property.isMortgaged && (
                 <button
-                  className="bg-blue-600 text-white p-2 rounded text-sm"
+                  className="border border-border bg-white/[0.06] hover:bg-white/[0.12] transition-colors text-white p-2 rounded text-sm shadow-raised"
                   onClick={() => handleUnmortgage(property)}
                 >
                   Unmortgage (

@@ -264,10 +264,14 @@ const PlayerTags = ({
         open={selectedTag !== null}
         onOpenChange={() => setSelectedTag(null)}
       >
-        {/* Pinned light deliberately. Phase 1 made bg-background black, and
-            everything inside this dialog is written for a light card. Phase 3
-            (materials, D2/D4) restyles it and removes this bg-white. */}
-        <DialogContent className="sm:max-w-[425px] bg-white text-black">
+        {/* BD-4's pin is cleared here (PLAN.md Phase 3 item 7): the
+            interior below was restyled for the dark ground FIRST, and only
+            then did the `bg-white text-black` come off. The dialog now takes
+            `bg-background`/`--foreground` like every other surface. The tag's
+            own colour stays on the title banner -- the six tag colours are
+            identity, not chrome, and Zach parked them out of this phase
+            2026-09-22. */}
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle
               className={`flex items-center gap-2 ${selectedTag?.color} text-white p-2 rounded-lg ${josephinBold.className}`}
@@ -278,24 +282,12 @@ const PlayerTags = ({
           </DialogHeader>
           <div className=" space-y-4">
             <div>
-              <h4
-                className={`font-semibold text-lg mb-2 text-black`}
-              >
-                Description
-              </h4>
-              <p className={`text-black`}>
-                {selectedTag?.description}
-              </p>
+              <h4 className={`font-semibold text-lg mb-2`}>Description</h4>
+              <p className={`text-neutral-300`}>{selectedTag?.description}</p>
             </div>
             <div>
-              <h4
-                className={`font-semibold text-lg mb-2 text-black`}
-              >
-                How to Earn
-              </h4>
-              <p className={`text-black`}>
-                {selectedTag?.howToEarn}
-              </p>
+              <h4 className={`font-semibold text-lg mb-2`}>How to Earn</h4>
+              <p className={`text-neutral-300`}>{selectedTag?.howToEarn}</p>
             </div>
           </div>
         </DialogContent>

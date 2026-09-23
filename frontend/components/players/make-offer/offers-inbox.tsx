@@ -190,7 +190,7 @@ const OffersInbox = ({
                       <div className={`flex flex-wrap gap-2`}>
                         <button
                           type="button"
-                          className={`${ACTION} font-semibold border-green-500 bg-green-700 hover:bg-green-600`}
+                          className={`${ACTION} font-semibold border-white bg-white/[0.14] hover:bg-white/[0.22]`}
                           onClick={() => {
                             onRespondOffer(o.id, "ACCEPT");
                             setConfirmingId(null);
@@ -216,7 +216,7 @@ const OffersInbox = ({
                     <div className={`mt-3 flex flex-wrap gap-2`}>
                       <button
                         type="button"
-                        className={`${ACTION} font-semibold border-green-500 hover:bg-green-700`}
+                        className={`${ACTION} font-semibold border-white hover:bg-white/[0.14]`}
                         onClick={() => setConfirmingId(o.id)}
                       >
                         {copy.accept}
@@ -230,7 +230,7 @@ const OffersInbox = ({
                       </button>
                       <button
                         type="button"
-                        className={`${ACTION} border-red-500 hover:bg-red-700`}
+                        className={`${ACTION} border-neutral-500 hover:bg-white/10`}
                         onClick={() => onRespondOffer(o.id, "DENY")}
                       >
                         {copy.decline}
@@ -267,7 +267,7 @@ const OffersInbox = ({
                 <div className={`mt-3 flex flex-wrap gap-2`}>
                   <button
                     type="button"
-                    className={`${ACTION} border-red-500 hover:bg-red-700`}
+                    className={`${ACTION} border-neutral-500 hover:bg-white/10`}
                     onClick={() => onRespondOffer(o.id, "WITHDRAW")}
                   >
                     {copy.withdraw}

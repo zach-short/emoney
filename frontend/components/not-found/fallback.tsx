@@ -37,9 +37,9 @@ export default function Fallback({
     <div
       className={`flex flex-col items-center justify-center px-8 w-full min-h-screen`}
     >
-      <p className={`text-4xl font ${josephinBold.className}`}>{displayTitle}</p>
+      <p className={`text-4xl ${josephinBold.className}`}>{displayTitle}</p>
 
-      <p className={`text-sm font`}>{displayMessage}</p>
+      <p className={`text-sm text-neutral-300`}>{displayMessage}</p>
 
       {error?.message && (
         <p className={`text-sm mt-2 text-red-500`}>
@@ -49,12 +49,13 @@ export default function Fallback({
 
       <div className={`flex-row mt-4 mb-8 `}>
         {onRetry && (
-          <Button onClick={onRetry} className="underline text-base mr-4">
+          <Button onClick={onRetry} tone="plain" className="underline text-base mr-4">
             Try Again
           </Button>
         )}
 
         <Button
+          tone="plain"
           onClick={() => {
             router.push(goBackHref);
           }}

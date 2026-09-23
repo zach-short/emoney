@@ -109,8 +109,13 @@ const SelectColorProperties = ({
             <div className="bg-gray-800 rounded-lg p-4">
               <div className="flex justify-between">
                 <span>{player.name}</span>
-                <span className={`text-yellow-400 ${numeralFace}`}>
-                  {formatMoney(newBalance)}
+                {/* Was `text-yellow-400`: a money figure wearing the
+                    identity colour, which D2 reserves for the wordmark and
+                    the three primary actions. A purchase is money out, so it
+                    takes the money-out token and the signed delta. */}
+                <span className={`text-money-out ${numeralFace}`}>
+                  {formatMoney(newBalance)} ({"\u2212"}
+                  {formatMoney(selectedProperty.price)})
                 </span>
               </div>
             </div>
@@ -118,7 +123,7 @@ const SelectColorProperties = ({
 
           <DrawerClose asChild className="w-full">
             <button
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg mt-4"
+              className="w-full border border-border bg-white/[0.06] hover:bg-white/[0.12] text-white py-3 rounded-lg mt-4 font-semibold shadow-raised transition-colors"
               onClick={handleConfirmPurchase}
             >
               Confirm Purchase

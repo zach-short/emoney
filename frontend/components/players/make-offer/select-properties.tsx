@@ -93,8 +93,8 @@ const MakeOfferProperties = ({
                       ${
                         isPropertySelected(property.id)
                           ? type === "offer"
-                            ? "bg-red-700"
-                            : "bg-green-700"
+                            ? "bg-money-out"
+                            : "bg-money-in"
                           : ""
                       }
                     `}
@@ -102,6 +102,10 @@ const MakeOfferProperties = ({
                   />
                   <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-2 text-center">
                     <span className={`text-lg ${numeralFace}`}>
+                      {/* D2: the selected card's red/green says which way this
+                          deed is moving, so the sign says it too. */}
+                      {isPropertySelected(property.id) &&
+                        (type === "offer" ? "\u2212" : "+")}
                       {formatMoney(property?.price)}
                     </span>
                   </div>

@@ -41,7 +41,7 @@ const CustomTransfer = ({
     <>
       <input
         placeholder="Amount"
-        className={`border p-4 bg-inherit rounded-lg text-2xl w-full border-neutral-400 ${numeralFace} shadow-md text-black my-4`}
+        className={`border p-4 bg-inherit rounded-lg text-2xl w-full border-neutral-400 ${numeralFace} shadow-raised text-black my-4`}
         value={amount}
         type="numeric"
         min={1}

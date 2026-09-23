@@ -61,6 +61,23 @@ design's citation wrong, and **this table is the one to build against**.
 | 0.30 | Fixed reading overhead per session | `AGENT-PRACTICES.md` ~13.8k + `CLAUDE.md` ~3.5k + `DESIGN.md` ~17.4k ≈ **34.6k tokens** before any work | `wc -c … \| awk '{print $1/4}'`, 2026-09-22 | **NEW** — the number the `Est. context` bands are computed against |
 | 0.31 | The `components/ui/` rule, and that it is safe to edit | The rule is one table cell at `CLAUDE.md:90`; the primary checkout's `CLAUDE.md` is **clean** (no concurrent uncommitted edit) | `git -C /Users/zachshort/Projects/emoney status --short CLAUDE.md`, 2026-09-22 | confirms — D8's guard is satisfied |
 
+**Corrections to this table, found by Phase 3 while building, 2026-09-22 (R5).** The rows are
+left as written; these are the disproofs, recorded where the wrong claim lives. Seven of the eight
+are line numbers that moved when Phases 1 and 2 landed — this table was verified at `c14faa5` and
+Phase 3 ran at `e144d6f`, so **cite the file, re-grep the line**. The eighth is not a line number
+and is the one that changed a scope item.
+
+| Row / plan text | Said | Actually, at `e144d6f` | How found |
+|---|---|---|---|
+| 0.11 | `offset={76}` at `sonner.tsx:17` | **`:23`** — Phase 2 inserted the body-face comment above it | read 2026-09-22 |
+| 0.20 | the loader's second `:root` at `globals.css:168-172` | **`:151-155`** before this phase's edit | read 2026-09-22 |
+| Phase 3 item 4 | the raw `!important` at `globals.css:79-81` | **`:62-64`** (`.color { color: yellow !important }`) | read 2026-09-22 |
+| Phase 3 item 4 | red/green literals at `make-offer/amount.tsx:71-74` | **`:76,77`** (the percent borders) and **`:101`** (the `$` icon) | read 2026-09-22 |
+| Phase 3 item 4 | red/green literals at `free-parking.tsx:81` | **`:83`**, and they are **green/blue**, not red/green — `text-green-600` for ADD against `text-blue-600` for Collect, which encodes no direction at all | read 2026-09-22 |
+| Phase 3 item 7 | player-tags' four `text-black` children at `:279,283,289,293` | **`:282,286,292,296`**, *plus* the `DialogContent`'s own `text-black` at `:267`, which the item did not name | read 2026-09-22 |
+| 0.15 | **14** shadow utilities | 14 confirmed exactly by the same grep — but the pattern `shadow-\(sm\|md\|lg\|xl\|2xl\)` **cannot see a bare `shadow`**, and there is one, at `ui/button.tsx:13` on the default variant. **15.** All 15 are on the scale now | grepped 2026-09-22 |
+| Phase 3 item 5 | set `mobileOffset` on `sonner.tsx` | **That prop does not exist in the installed sonner.** `sonner@1.7.1` declares `offset?: string \| number` and `visibleToasts?: number` and nothing of the kind (`node_modules/sonner/dist/index.d.ts:93,98`); its mobile block hardcodes `top: 20px` and defines a single `--mobile-offset` used only for left/right (`dist/styles.css:369-404`). `mobileOffset`, and the `top: var(--mobile-offset-top)` that consumes it, are **sonner 2.x** (confirmed against the library's current docs, 2026-09-22). See `BD-9` | read + Context7, 2026-09-22 |
+
 **Not re-verified by this pass, and still standing on the audit alone:** every *walked* claim —
 the live DOM readings, the measured rectangles, the computed colours, the 390×844 overlap
 measurement — because they need a browser against `https://emoney.club` and this session did not
@@ -143,6 +160,95 @@ drops the class and gains `font-semibold`; `josephinNormal` and `josephinLight` 
 numeral face instead.
 *Reversal:* the mapping is one Tailwind utility per site and is visible in the diff as
 `font-semibold`. To go heavier everywhere, `font-semibold` → `font-bold`; to go lighter, delete it.
+
+**BD-7 — the scrim covers `ui/dialog.tsx` as well as `ui/drawer.tsx`. Zach's call, asked and
+answered in chat 2026-09-22.**
+D4 names "the drawer scrim" and cites `drawer.tsx:31`, and D4's whole point is that there are
+*exactly four* glass surfaces. `dialog.tsx:24` carried the identical `bg-black/80` and therefore
+the identical measured defect, and Phase 3 item 7 turns both pinned dialogs into black cards — so
+without this a dialog over a black room reads as a full-screen page, which is the state D4 exists
+to fix. Asked rather than taken because a fifth glass surface would contradict a ratified decision
+(R12). The answer: **"the scrim" is one surface kind, not one file**; the count stays at four. The
+two alternatives offered and refused were leaving `dialog.tsx` opaque, and separating the dialog by
+elevation alone.
+*Reversal:* put `bg-black/80` back at `dialog.tsx:24` and drop the `backdrop-blur-[12px]`. The
+drawer is unaffected.
+
+**BD-8 — the dice loader's `#ffff00` goes greyscale.**
+D2 names the loader's second `:root` as one of the two homes of the literal and then allows the
+yellow only on the wordmark and the primary action of `/`, `/create` and `/join`. A full-screen
+splash is neither, and the loader is on the walk path — `components/containers/data-state.tsx:55`
+makes `DiceLoader` the default loading component, so it renders inside the room. `--color-theme`
+and `#loading p`'s colour are now `hsl(0 0% 88%)`; the pips stay `#000` and still read against it.
+Taken rather than asked because D2's sentence is not ambiguous and re-opening it would be R8.
+*Reversal:* two values in `globals.css` — `--color-theme` and the `#loading p` colour — back to
+`#ffff00`, plus `border-neutral-600` back to `border-yellow-100` at `loaders/dice.tsx:13`.
+
+**BD-9 — the toast's mobile offset is a CSS rule, not the `mobileOffset` prop item 5 names.**
+The prop is sonner 2.x and this repo is on `1.7.1` (see the §0 correction table). Upgrading a major
+version is not something this phase may do: GATE 2 released exactly two installs,
+`@radix-ui/react-popover` and `motion`, each inside its own phase, and neither is sonner. So the
+dial is applied against the version that is actually installed — a `--toast-mobile-offset: 76px`
+token on `:root` and one rule overriding sonner's hardcoded `top: 20px` inside the same
+`@media (max-width: 600px)`. It is selected as `html [data-sonner-toaster][data-y-position="top"]`,
+specificity (0,2,1) against the vendor's (0,2,0), so it wins on specificity rather than on
+stylesheet order — which matters because the vendor CSS is bundled, not authored here. `76` is the
+same number the desktop `offset={76}` uses: one dial, two places it is applied.
+*Reversal:* delete the `@media` block and the token from `globals.css`. When sonner next goes past
+2.0, delete it anyway and pass `mobileOffset={{ top: 76 }}` — the comment at the rule says so.
+
+**BD-10 — what a field is (item 8): a recessed well, and the document declares its colour scheme.**
+Item 8 made this phase decide before touching `ui/input.tsx`, and Phase 1's R1.5 could not verify
+how the field painted. **A field is the one place the page asks for something back, so it reads as
+a hole in the surface, not a plane on top of it.** `bg-transparent` gave it no extent at all and
+left the hairline border doing the whole job; it is now `bg-white/[0.04]` with the same border and
+the `flat` elevation step — **no fifth token**, because the recess is carried by the fill, which
+keeps D4's four-step dial intact. The second half is `color-scheme: dark` on `:root`: until a
+document declares its scheme the native controls, the caret, autofill and the scrollbars all paint
+from the light default however the CSS is written, and that is the real cause of the white-box
+rendering R1.5 could not get a trustworthy picture of. Verified live 2026-09-22: the banker's
+Add-Money field renders dark with white text in a real browser.
+*Reversal:* `bg-transparent` and `shadow-sm` back at `input.tsx:11`; drop `color-scheme: dark`.
+The raw `<input>`s that do not go through `ui/input.tsx` were left alone — see *Raised, not folded
+in* below.
+
+**BD-11 — how far D2's palette reaches, and what it deliberately does not touch.**
+Item 4 names two files for the red/green promotion, but its own done-when — "every money-direction
+indicator must also show a sign glyph" — is app-wide, and a token applied at two of seven sites for
+one meaning is a third literal, not a palette. So:
+**tokens + a sign glyph at every money-direction site** — `make-offer/amount.tsx` (percent borders
+and the `$` icon; `\u2212`/`+` on every percent button, not only the selected one, because the
+glyph is what says which side of the trade the column is), `navbar/free-parking.tsx`,
+`make-offer/make-offer.tsx` (five borders), `make-offer/select-properties.tsx`,
+`players/pay.req.rent.component.tsx` and `players/purchase-properties-bank.tsx`. On the last two
+the glyph goes on a **signed delta beside the balance**, not on the balance itself, because the
+balance is not negative.
+**Saturated chrome that is not a direction goes greyscale**, which is D2's "colour never means
+'this is a button'": offers-inbox's green Accept and red Decline/Withdraw, the blue Confirm buttons
+at `pay.req.rent.component.tsx` and `manage-properties.tsx`, the green Confirm Purchase, the yellow
+Mortgage, and `ui/slider.tsx`'s two yellows. `manage-properties.tsx`'s Buy/Sell Confirm went
+greyscale rather than to a token because the line above it already reads `Buy 2 houses (-$200)`.
+**Red that stays**: the error-toast icons (`free-parking.tsx:94,99,105`,
+`manage-properties.tsx:263,312`), the delete-room Danger Zone (`navbar.tsx:202-228`) and the
+`not-found` error line. Those are an error axis, not money direction, and Phase 1's as-built kept
+`--destructive` bright deliberately.
+**The six `player-tags.tsx` badge colours are parked — Zach's call, asked and answered in chat
+2026-09-22**, against greyscaling them and against collapsing them to a rarity ramp. They are
+identity, like player colour, and item 4 does not name them. They are the reason the tag banner in
+that dialog keeps its colour after the pin came off.
+*Reversal:* each is one Tailwind utility, and the tokens are two values on `:root`.
+
+**BD-12 — the identity treatment becomes opt-out rather than unconditional.**
+`ui/link.tsx` and `ui/button-custom.tsx` *are* the primary action on `/`, `/create` and `/join`, so
+the `.font` stroke plus `border-yellow-200` stays their default — but the same two components are
+also used on `/my-rooms`, `/install` and the error fallback, which are not among D2's three places.
+They take a `tone?: "identity" | "plain"` prop, exported as `toneClasses` from `link.tsx`, and the
+three off-brand call sites pass `tone="plain"`. **This is not collapsing the five button
+languages** (*Rules that survive unchanged* #9): no button language was merged, no structure
+changed, and the prop is a colour variant — which is what the phase's own *watch for* says Phase 3
+touches.
+*Reversal:* delete the prop and inline `font border-yellow-200` in both components again; the three
+call sites then go back to yellow.
 
 ---
 
@@ -392,8 +498,14 @@ cd frontend && bun run build
 
 ### Phase 3 — Materials, elevation and the toast
 
-**Status: `PLANNED`. Lane 1. Driver: Opus 5. Waits on: Phase 1.**
-Implements **D4**, **D2** and **D9(a)**.
+**Status: `BUILT 2026-09-22`, commit `<pending — Zach commits>`. Lane 1. Driver: Opus 5 (the
+assigned driver; the session checked its own model against this line before reading anything).
+Waited on: Phase 1 — built on `e144d6f`, which is Phase 2.**
+Implements **D4**, **D2** and **D9(a)**. Took **BD-7**…**BD-12** while building, all in §1 with
+their reversals; **BD-7 and BD-11's tag-colour half are Zach's calls**, asked and answered in
+chat 2026-09-22 before the files they gate were edited (R12, R6).
+
+**34 files, all under `frontend/`. Nothing in `backend/` was touched.**
 
 **Scope.**
 1. **The scrim.** Replace `bg-black/80` (`drawer.tsx:31`) with the §3 dial values: black at 55%
@@ -468,6 +580,83 @@ cd frontend && bun run build
 - **The five button languages are not collapsed here** (*Rules that survive unchanged* #9).
   Phase 3 touches colour tokens, not button structure. Collapsing them mid-phase is the drive-by
   `CLAUDE.md` forbids.
+
+---
+
+#### As built — 2026-09-22
+
+**All eight scope items landed.** Items 1, 2, 5, 6, 7 and 8 as written; item 3 covers **15**
+utilities rather than 14 (§0 corrections); item 4 reaches further than its two named files, and
+**BD-11** is the argument for exactly how far.
+
+**The token layer is where the phase actually lives.** `app/globals.css` gained six values on the
+single `:root` — `--money-in`, `--money-out`, the four `--elevation-*` steps — plus
+`--toast-mobile-offset` and `color-scheme: dark`; `tailwind.config.ts` exposes them as
+`text-money-in` / `border-money-out` and `shadow-flat|raised|overlay|modal`. **Nothing in a feature
+component names a colour or a shadow value any more**; they name a token. That is what row 0.16
+("zero tokens in feature code") was measuring the absence of.
+
+**Elevation on a near-black ground is a highlight, not a shadow.** Tailwind's ramp is tuned for a
+white page: a black drop shadow on `#000` draws nothing, which is why the 14 utilities the audit
+counted were unsystematic *and* invisible. Each step here is an `inset 0 1px 0` white hairline on
+the top edge — light falling on a raised plane — plus a wide, very dark, heavily-spread shadow that
+only separates. The mapping: controls → `raised` (the two toggle tracks and thumbs, all four
+`button.tsx` variants, `return-to-menu`, the Pay-or-Request button, the slider thumb, the two dead
+files' shadows); the toast → `overlay`; `dialog.tsx` → `modal`. **One shadow was added rather than
+replaced**: `DrawerContent` had none at all and is the `modal` step by definition — it is most of
+what makes the sheet read as a sheet, and the scrim was doing the whole job alone.
+
+**The scrim is the item the phase existed for, and it works.** `bg-black/55` +
+`backdrop-blur-[12px]` on both `drawer.tsx:31` and `dialog.tsx:24` (BD-7). Verified live: the room
+name and the player card are legible-but-subdued through it, which is the "can you tell a sheet is
+over a room" test. The blur radius is a **pre-authorised dial and was not moved** — no device
+measurement was taken (see *Done when*, and R3.3 in `RUNTIME-PASS.md`).
+
+**The header's translucency needed a border the opaque one never did.** `bg-black/60` +
+`backdrop-blur-[8px]` + `border-b border-white/10` at `room.client.tsx:97`. Without the hairline the
+header had no bottom edge at all once it stopped being opaque, and the card strip passing under it
+read as a rendering fault rather than as depth. Walked at 390×520 with the strip scrolled under it.
+
+**The toast's own transform is why the first three measurements looked like a failure.** sonner
+positions a top toaster by its `top` and then animates the toast in from `translateY(-100%)`. A
+measurement taken inside a polling loop catches the enter transition mid-flight and reports the
+toast ~55px (its own height) above where it settles. **Settled, measured at 390×844: toast
+`top: 76, bottom: 131` against header `top: 0, bottom: 65` — an 11px gap.** The audit's figures
+were `top: 20, bottom: 72` against `64`. Measure a toast after it has settled, not while it moves.
+
+**`text-xs` → `text-sm` is two call sites, both in `app/room/[code]/page.tsx`** (the `ERROR` branch
+and the success branch), and `visibleToasts={3}` is on the Toaster. `duration: 4000` untouched, as
+the dial says. Phase 2's `manrope.className` on the Toaster was kept — verified still computing
+`Manrope` at 14px after the edit.
+
+**BD-4's two pins are cleared, interiors first, and the inversion was the real work.**
+`remove-player`'s selected `OptionRow` now goes `bg-white text-black` with a `raised` step against
+an unselected `border-white/25` — measured live as `rgb(255,255,255)` on `rgb(0,0,0)` selected and
+`rgba(255,255,255,0.25)` hairline unselected. `player-tags`'s dialog dropped `bg-white text-black`
+and its five `text-black` children; its tag-colour banner stayed (BD-11).
+
+**Est. context was `comfortable` and that was wrong — call it `full`.** The band was set against a
+narrow reading of item 4. 34 files is Phase 2's size, not "three files plus a token block". The
+work was not harder, but a future plan should price "apply a palette decision" by the number of
+literals it has to find, not by the number of surfaces the decision names.
+
+**Raised, not folded in** (R9 — none dropped silently, none fixed here):
+- **The raw `<input>`s do not go through `ui/input.tsx`** and so did not get BD-10's field
+  treatment: `free-parking.tsx:74` (`bg-inherit`, measured transparent live), `amount.tsx:115`
+  (which *was* changed, because it is inside a file item 4 already owned — it took
+  `bg-white/[0.04]` and `pl-14` to clear the widened sign glyph),
+  `pay.req.rent.component.tsx:200` and `room-code-input.tsx`. `color-scheme: dark` improves all of
+  them; the fill does not reach them. A "make every field go through `ui/input.tsx`" row is worth
+  having.
+- **`manage-properties.tsx:263` formats money by hand** — `` `You need $${totalCost - player.balance}` ``
+  — bypassing Phase 2's `formatMoney()`. It is in a toast detail line, which is why the Phase 2
+  sweep's `.className` grep could not see it. Board row 1 / the money-format follow-up.
+- **`components/ui/loader.tsx` still carries `border-yellow-200`** and was left alone: it is
+  imported nowhere (raised in HANDOFF 45), so it cannot be walked and it is board row 1's to
+  delete. The live loader is `components/loaders/dice.tsx`.
+- **The websocket to the production API drops during a local dev session** and raises Next's dev
+  overlay as "1 Issue" — visible in every screenshot from this walk. Same artifact HANDOFF 45
+  raised; not this phase's and not a regression.
 
 ---
 

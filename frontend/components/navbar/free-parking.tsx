@@ -40,11 +40,11 @@ const FreeParkingDialog = ({
       </div>
 
       <button
-        className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-md font-semibold mb-4`}
+        className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-raised font-semibold mb-4`}
         onClick={() => setType(type === "ADD" ? "REMOVE" : "ADD")}
       >
         <div
-          className={`absolute w-1/2 h-full bg-white rounded-full shadow-md transition-transform duration-300 ${
+          className={`absolute w-1/2 h-full bg-white rounded-full shadow-raised transition-transform duration-300 ${
             type === "ADD" ? "translate-x-0" : "translate-x-full"
           }`}
         />
@@ -79,8 +79,13 @@ const FreeParkingDialog = ({
           Cancel
         </div>
         <DrawerClose
-          className={`flex-1 py-3 text-center bg-white rounded-md ${
-            type === "ADD" ? "text-green-600" : "text-blue-600"
+          // D2 promotes this pair into the money-direction tokens. It used
+          // to be green for ADD and BLUE for Collect, which encoded nothing:
+          // from the player's balance, adding to the pot is money out and
+          // collecting is money in. The glyph in the label carries the same
+          // thing without the colour.
+          className={`flex-1 py-3 text-center bg-white rounded-md font-semibold ${
+            type === "ADD" ? "text-money-out" : "text-money-in"
           }`}
           onClick={() => {
             if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
@@ -107,7 +112,7 @@ const FreeParkingDialog = ({
             }
           }}
         >
-          {type === "ADD" ? "Add to Pot" : "Collect"}
+          {type === "ADD" ? "\u2212 Add to Pot" : "+ Collect"}
         </DrawerClose>
       </div>
     </div>

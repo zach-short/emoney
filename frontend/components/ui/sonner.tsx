@@ -21,10 +21,17 @@ const Toaster = ({ ...props }: ToasterProps) => {
       // The room's notifications are top-center and were landing squarely on
       // the room name in the sticky header (h-16). Clear it.
       offset={76}
+      // A burst of socket frames stacked without limit -- every refetch in
+      // `app/room/[code]/page.tsx` raises one. Three is the dial (PLAN.md
+      // section 3). `duration: 4000` is set per-toast at the call site and is
+      // deliberately left alone. The mobile half of the offset dial is a rule
+      // in `app/globals.css`, not a prop: `mobileOffset` is sonner 2.x and
+      // this is 1.7.1 -- the comment there has the whole argument.
+      visibleToasts={3}
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
+            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-overlay",
           description: "group-[.toast]:text-muted-foreground",
           actionButton:
             "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",

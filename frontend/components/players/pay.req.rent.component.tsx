@@ -248,16 +248,25 @@ const PayRequestRent = ({
           <div className="space-y-4">
             <h3 className="text-lg">Updated Balances</h3>
             <div className="bg-gray-800 rounded-lg p-4 space-y-3">
+              {/* These are the balances AFTER the transaction, and the
+                  red/green was the only thing saying which of them went down.
+                  D2 promotes the pair to the money-direction tokens and adds
+                  the signed delta beside each -- the glyph belongs on the
+                  change, not on the balance, because the balance itself is
+                  not negative. */}
               <div className="flex justify-between">
                 <span>{balances.payingPlayerName}</span>
-                <span className={`text-red-400 ${numeralFace}`}>
-                  {formatMoney(balances?.payingBalance || fromPlayer.balance)}
+                <span className={`text-money-out ${numeralFace}`}>
+                  {formatMoney(balances?.payingBalance || fromPlayer.balance)}{" "}
+                  ({"\u2212"}
+                  {formatMoney(transactionDetails?.amount)})
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>{balances?.receivingPlayerName}</span>
-                <span className={`text-green-400 ${numeralFace}`}>
-                  {formatMoney(balances?.receivingBalance || toPlayer.balance)}
+                <span className={`text-money-in ${numeralFace}`}>
+                  {formatMoney(balances?.receivingBalance || toPlayer.balance)}{" "}
+                  (+{formatMoney(transactionDetails?.amount)})
                 </span>
               </div>
             </div>
@@ -265,7 +274,7 @@ const PayRequestRent = ({
 
           <DrawerClose asChild className="w-full">
             <button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg mt-4"
+              className="w-full border border-border bg-white/[0.06] hover:bg-white/[0.12] text-white py-3 rounded-lg mt-4 font-semibold shadow-raised transition-colors"
               onClick={handleConfirmTransaction}
             >
               Confirm {type === "SEND" ? "Payment" : "Request"}

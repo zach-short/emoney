@@ -165,3 +165,118 @@ when you next open the app.** Every "verified" below is a screenshot or a `getCo
 - **Right answer.** They still read as emphasised. `PLAN.md` BD-6 maps Josefin 700 → Manrope 600
   on these, because Josefin's 700 at its x-height is not Manrope's 700. **If any of them now
   looks heavier or lighter than it should, that is a one-utility fix and BD-6 says which.**
+
+---
+
+## Phase 3 — Materials, elevation and the toast. Entries written 2026-09-22.
+
+**How the phase was walked.** A dev server from this worktree against the production API
+(`.claude/launch.json` → `ui-facelift-frontend`; the entry had to be copied into the *primary*
+checkout's `launch.json` for the preview tool to see it, and was restored from a backup afterwards
+— the primary checkout is clean), in the Claude desktop browser pane at **390×844**, the width the
+done-when names, and once at **390×520** to get the card strip to scroll under the header. Same
+throwaway production room **`UIP1CHK`**, two players: "Banker" (`$1,850` after one $25 banker add
+made during this walk) and "P2Check" (`$1,500`). **Both are real rows in the production database —
+delete the room when you next open the app.** Every "verified" below is a screenshot or a
+`getComputedStyle` / `getBoundingClientRect()` read, named per entry.
+
+**One thing to know before re-walking R3.2.** sonner animates a top-positioned toast in from
+`translateY(-100%)`. A rectangle read inside a polling loop catches that transition and reports the
+toast about its own height above where it settles, which looks exactly like the fix having failed.
+Wait two seconds, then measure.
+
+### R3.1 — A drawer reads as a sheet over a room, not as a full-screen page. **Verified.**
+- **Where.** Any room → the navbar menu (☰). Also the banker's ⊕ dialog and the two dialogs in
+  R3.5, which now share the scrim.
+- **Right answer.** The room stays *perceptible* behind the drawer: blurred and subdued, but you
+  can see the room name and the top of the player card and tell there is something back there. It
+  must not be a flat black band. Verified 2026-09-22: overlay computes `rgba(0, 0, 0, 0.55)` with
+  `backdrop-filter: blur(12px)`, the sheet carries the `modal` step
+  (`rgba(255,255,255,0.11) 0 1px 0 inset, rgba(0,0,0,0.85) 0 24px 56px -12px`), plus screenshots of
+  the menu drawer and of the Add-Money dialog with the player card legible-but-blurred behind it.
+
+### R3.2 — The toast no longer covers the header, measured not eyeballed. **Verified.**
+- **Where.** 390×844, any room, any action that raises a notification — reloading the room raises
+  the join broadcast, which needs no database write.
+- **Right answer.** The two rectangles do not overlap. Verified 2026-09-22, settled (see the note
+  above): **toast `top: 76, bottom: 131`; header `top: 0, bottom: 65`** — an 11px gap. The audit
+  measured `top: 20, bottom: 72` against `64`. Also read at the same time: the toast title computes
+  **`Manrope` at `14px`** (the `text-sm` dial, and Phase 2's face still winning), and the toast
+  carries the `overlay` elevation step.
+
+### R3.3 — The scrim does not stutter on a real phone. **NOT verified — needs a device.**
+- **Where.** A mid-range Android, on `https://emoney.club` once this branch is merged and
+  deployed. Open and close the navbar drawer ten or fifteen times in a row, then the banker's ⊕
+  dialog, and watch the *close* in particular.
+- **Right answer.** No dropped frames, no visible step as the blur comes off. **This is the one
+  done-when no gate and no desktop browser can supply, and the repo has no performance baseline of
+  any kind to fall back on** (design §1.9). `backdrop-filter` is the most expensive thing in this
+  work. **If it stutters, lower the scrim dial — it is pre-authorised to move down.** It is
+  `backdrop-blur-[12px]` at `components/ui/drawer.tsx:31` and `components/ui/dialog.tsx:24`; the
+  header's is `backdrop-blur-[8px]` at `components/room/room.client.tsx:97`. **Never raise either
+  without a measurement.**
+
+### R3.4 — Nothing yellow survives outside the three allowed places. **Verified.**
+- **Where.** `/`, `/create`, `/join` and a room, at 390×844.
+- **Right answer.** `#ffff00` appears on the wordmark and on the primary action of those three
+  pages, and nowhere else. Verified 2026-09-22 by reading `webkitTextStrokeColor`, `color`,
+  `borderColor` and `backgroundColor` off **every element** on each page and counting
+  `rgb(255,255,0)`: **`/` → 3** (E-Money, Join Room, Create Room), **`/create` → 2** (E-Money,
+  Next), **`/join` → 2** (E-Money, Next), **a room → 0**. Re-run that count rather than looking.
+  The player card's yellow name bar is the *player's own colour* and is not `#ffff00` — D2 keeps it.
+
+### R3.5 — BD-4's two pinned dialogs are dark and readable. **Verified.**
+- **Where.** A player card → the "Cash King" tag; and a player card → Remove player.
+- **Right answer.** Both are black cards with white copy, on the blurred scrim. **player-tags**:
+  white headings, grey body, and the tag's own colour still on the title banner (parked by Zach —
+  `PLAN.md` BD-11). **remove-player**: the selection *inverts* — the selected option is a filled
+  **white** row with black text and a `raised` step, unselected rows are a `rgba(255,255,255,0.25)`
+  hairline with white text. Verified 2026-09-22: dialog `rgb(0,0,0)` / `rgb(255,255,255)`; selected
+  row `bg rgb(255,255,255)` / `color rgb(0,0,0)`; three unselected rows reading back the hairline;
+  the successor row's player-colour swatch intact; plus screenshots of both. **Before Phase 1's pin
+  these were black-on-black and unreadable — that is what BD-4 existed to prevent.**
+
+### R3.6 — Every money-direction indicator carries a sign glyph. **Partly verified.**
+- **Where, verified.** Another player's card → the name bar → **I'm offering → Cash**, and
+  **I Would Like → Cash**; then ☰ → **Free Parking**, toggling Add/Collect.
+- **Where, NOT walked.** Pay or Request's *Updated Balances* (needs a property dealt and a rent
+  calculation), *Balance After Purchase* (☰ → Bank's Properties → buy), Develop Property's
+  Buy/Sell line, and the offer panel's **property** buttons (needs properties dealt — the check
+  room has none).
+- **Right answer.** Wherever red or green says which way money is going, a `−` or `+` says it too.
+  Verified 2026-09-22: the offer side reads **`−10% −25% −50% −75% −100%`** with a `−$` glyph, the
+  selected border and the glyph both `rgb(238, 94, 83)` (`--money-out`); the request side reads
+  **`+10% … +100%`** with `+$` at `rgb(54, 211, 112)` (`--money-in`); the staged offer renders
+  **`−$925`**; free parking reads **`− Add to Pot`** in money-out and **`+ Collect`** in money-in.
+  On the unwalked screens the glyph is a **signed delta beside the balance** (`$1,300 (−$500)`),
+  never on the balance itself.
+
+### R3.7 — A field reads as a recessed well and paints dark. **Verified.**
+- **Where.** The banker's ⊕ → "Enter amount"; the offer panel's amount field.
+- **Right answer.** A faint filled well on the black card with white text and a hairline border —
+  **not** a white box, and not a transparent gap with only a border. Verified 2026-09-22:
+  `background rgba(255, 255, 255, 0.04)`, `color rgb(255, 255, 255)`, `box-shadow: none`, plus a
+  screenshot of the Add-Money dialog. **This is the entry Phase 1's R1.5 could not get a
+  trustworthy picture of**; `color-scheme: dark` on `:root` is what fixed the painting
+  (`PLAN.md` BD-10). **The raw `<input>`s that do not go through `ui/input.tsx` did not get the
+  fill** — `free-parking.tsx:74` measured transparent live. They are legible; they are just not on
+  the new field treatment. Raised in `PLAN.md`.
+
+### R3.8 — The card strip visibly passes under the header. **Verified.**
+- **Where.** A room on a short viewport (walked at 390×520, where the card is taller than the
+  screen), scrolled down. At 390×844 the card is centred and nothing scrolls under it, so this
+  cannot be seen at that size.
+- **Right answer.** The white card and the player's colour bar show *through* the header, blurred
+  and darkened, with a hairline separating the two — not cut off at a hard black edge. Verified
+  2026-09-22: header computes `rgba(0, 0, 0, 0.6)` with `backdrop-filter: blur(8px)` and
+  `border-bottom rgba(255, 255, 255, 0.1)`, plus a screenshot with the card visible through it.
+
+### R3.9 — The dice loader is no longer yellow. **Verified by code and computed value; not seen.**
+- **Where.** `/my-rooms` while it reads localStorage, and anywhere
+  `components/containers/data-state.tsx` is waiting on data.
+- **Right answer.** Light-grey dice with black pips and a grey "LOADING", on black — no yellow.
+  `--color-theme` and `#loading p`'s colour are `hsl(0 0% 88%)` in `app/globals.css` and
+  `loaders/dice.tsx:13` now carries `border-neutral-600` (`PLAN.md` BD-8). **Not caught on screen**:
+  the loader's window is ~500ms and no walk in this session landed inside it. The yellow count in
+  R3.4 would have caught it had it been on screen during those reads, which is weaker than a
+  sighting. Worth ten seconds on a slow connection.

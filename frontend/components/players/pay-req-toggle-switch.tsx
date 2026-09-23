@@ -16,11 +16,11 @@ const PayRequestRentToggleSwitch = ({ onToggle }: SendReqToggleProps) => {
 
   return (
     <button
-      className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-md font-semibold mb-4`}
+      className={`relative w-full h-12 rounded-full border border-neutral-400 shadow-raised font-semibold mb-4`}
       onClick={handleToggle}
     >
       <div
-        className={`absolute w-1/2 h-full bg-white rounded-full shadow-md transition-transform duration-300 ${
+        className={`absolute w-1/2 h-full bg-white rounded-full shadow-raised transition-transform duration-300 ${
           isSend ? "translate-x-0" : "translate-x-full"
         }`}
       />

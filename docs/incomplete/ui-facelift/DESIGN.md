@@ -135,6 +135,46 @@ glyph this decision keeps is B2's honest mitigation, adopted without adopting B2
 "templated shadcn dark app" look this effort exists to escape. The retained yellow is the hedge,
 and it is deliberately narrow.
 
+**As built, 2026-09-22 — Phase 3 (`PLAN.md`).** The decision stands whole. Six things about it are
+worth the next reader's time.
+
+**The yellow test is now mechanical, and it passes.** Measured live by walking each page and
+reading `webkitTextStrokeColor` / `color` / `borderColor` / `backgroundColor` off **every** element:
+`/` has exactly three `#ffff00` elements (the wordmark and the two primary actions), `/create` and
+`/join` have two each (the wordmark and *Next*), and **a room has zero**. This is the check to
+re-run rather than re-eyeball.
+
+**The two literals this decision cited were at different lines than it said, and one was a
+different colour.** The raw `!important` was `.color { color: yellow !important }` at
+`globals.css:62-64`, not `:79-81`; `free-parking.tsx`'s pair was at `:83` and was
+**`text-green-600` / `text-blue-600`** — green for *Add to Pot*, blue for *Collect* — which encodes
+no direction at all. Promoting it meant **choosing the mapping, not preserving it**: from the
+player's own balance, adding to the pot is money *out* and collecting is money *in*, so *Add to
+Pot* is now the red token. The sign glyph is what makes that legible without relying on the flip
+being noticed. Full table in `PLAN.md` §0's corrections block.
+
+**`.color` was deleted rather than rewritten.** It painted the help, dice, install and back icons
+and three headings through a raw `!important`; with the rule gone they inherit `--foreground` and
+are greyscale by construction, which is stronger than replacing one hardcoded colour with another.
+
+**The identity treatment is now opt-out** (`PLAN.md` BD-12). `ui/link.tsx` and
+`ui/button-custom.tsx` keep the `.font` stroke by default because they *are* the primary action on
+the three allowed pages; `/my-rooms`, `/install` and the error fallback pass `tone="plain"`. **No
+button language was collapsed** — *Rules that survive unchanged* #9 holds.
+
+**The redundant sign glyph reaches seven sites, not the two this decision names**, because the
+done-when is app-wide and a token used twice is a third literal. Where the coloured figure is a
+*resulting balance* rather than a direction — the Updated Balances rows, Balance After Purchase —
+the glyph goes on a **signed delta beside it** (`$1,300 (−$500)`), never on the balance, which is
+not negative. `PLAN.md` BD-11 lists every site, and also what stayed red: the error-toast icons,
+the delete-room Danger Zone and the `not-found` line are an *error* axis, not money direction.
+
+**The six `player-tags.tsx` badge colours are parked, not greyscaled — Zach's call, chat
+2026-09-22.** "Player colour and property-group colour are the only saturated colour inside the
+room" reads as excluding them; they were put to him as a real question with three options and he
+parked them as identity, like player colour. This is a scoping answer, **not a supersession of
+D2** — nothing about the sentence changed, and if they are ever taken on it is a new decision.
+
 ### D3 — Three type jobs, split; numerals first. Ratified 2026-09-22. (§6.3 → §3-C)
 
 Three sub-answers, all taking the recommendation:
@@ -227,6 +267,39 @@ known compositor cost on low-end Android, in an app whose whole job is to be ins
 board game — and §1.9 confirms no performance baseline exists to say whether that risk is real
 here or theoretical. The blur dial is set low for this reason (§4: 12px scrim, 8px header) and
 §5 carries the hazard. Raising it requires a device measurement first.
+
+**As built, 2026-09-22 — Phase 3 (`PLAN.md`).** The decision stands, with one clarification Zach
+made and one surface added inside the existing count.
+
+**"The drawer scrim" is one surface *kind*, not one file — Zach's call, chat 2026-09-22
+(`PLAN.md` BD-7).** This decision cites `ui/drawer.tsx:31`, but `ui/dialog.tsx:24` carried the
+identical `bg-black/80` and therefore the identical measured defect, and Phase 3 turns both of
+BD-4's pinned dialogs into black cards. Left opaque, a dialog over a black room would have read as
+a full-screen page — the exact state this decision exists to fix, reintroduced by the phase that
+fixes it. Both files now carry `bg-black/55` + `backdrop-blur-[12px]`. **The count stays at four**;
+it was asked rather than assumed precisely because "exactly four" is the load-bearing word here.
+
+**The sheet itself gained the `modal` step, which is not a fifth surface.** `DrawerContent` had no
+shadow at all; it is the modal step by definition and the elevation scale is already one of the
+four. The hairline top highlight is most of what makes the sheet read as a plane over the scrim
+rather than a region of it.
+
+**Elevation had to be redesigned, not renamed.** Tailwind's ramp is tuned for a white page — a
+black drop shadow on `#000` draws nothing — so the 14 utilities §1.3 counted were not merely
+unsystematic, they were *invisible*. Each step is an `inset 0 1px 0` white hairline on the top edge
+plus a wide, very dark, heavily-spread shadow. **There were 15, not 14**: `ui/button.tsx:13` has a
+bare `shadow` the audit's `shadow-(sm|md|lg|xl|2xl)` grep could not match. All 15 are on the scale.
+
+**The header needed a border the opaque version never did.** Translucency removed its bottom edge
+entirely, and the card strip passing under it read as a fault rather than as depth; it carries
+`border-b border-white/10`. Verified by scrolling the strip under it at 390×520.
+
+**The dials were not moved.** 12px scrim, 8px header, four steps, as ratified — and the scrim blur
+**has still not been measured on a device** (`RUNTIME-PASS.md` R3.3). It is the one open obligation
+this decision leaves behind, and the dial only moves *down* without one.
+
+**The player card and the property deed are untouched.** Still paper. The only elevation that
+reached the card is the Pay-or-Request button's `raised` step, which was already a `shadow-xl`.
 
 ### D5 — Cash count-up, with its mitigation as a first-class constraint. Ratified 2026-09-22. (§6.5 → §3-E)
 
@@ -350,6 +423,31 @@ lane is how that disagreement gets introduced.
 
 **R9.** None of the three was dropped silently; (b) is `raised, not folded in`, and its home is
 named.
+
+**As built, 2026-09-22 — Phase 3 (`PLAN.md`).** (a) is fixed and measured. (c) was fixed by Phase 1.
+(b) is still board row 1's.
+
+**(a) could not be fixed the way it was specified, and the reason is a version.** This decision and
+`PLAN.md` item 5 both say to set `mobileOffset`. **That prop does not exist in the installed
+sonner.** `sonner@1.7.1` declares `offset?: string | number` and `visibleToasts?: number` and
+nothing of the kind (`node_modules/sonner/dist/index.d.ts:93,98`); its mobile block hardcodes
+`[data-sonner-toaster][data-y-position='top'] { top: 20px }` and defines a single `--mobile-offset`
+used only for left and right (`dist/styles.css:369-404`, read 2026-09-22). `mobileOffset`, and the
+`top: var(--mobile-offset-top)` that consumes it, are **sonner 2.x** — confirmed against the
+library's current docs the same day. A major-version bump is not this phase's to take: GATE 2
+released exactly two installs and neither is sonner. So the dial is applied as a CSS override at
+sonner's own breakpoint, keyed to a `--toast-mobile-offset: 76px` token. `PLAN.md` BD-9 carries the
+mechanism and the reversal. **This is a change of means, not of the decision**: the toast clears the
+header, which is all (a) asked for.
+
+**The measurement, settled, at 390×844: toast `top: 76, bottom: 131`; header `top: 0, bottom: 65`.
+An 11px gap, no overlap.** Against the audit's `top: 20, bottom: 72` versus `64`.
+
+**Measure it after it settles.** sonner animates a top toast in from `translateY(-100%)`, so a
+rectangle read inside a polling loop catches the transition mid-flight and reports the toast about
+its own height (55px here) *above* where it lands — which looks exactly like the fix having failed.
+Three successive readings said so before a plain two-second wait showed `translateY(0)` and the
+real position. Any future check of this must wait, not poll.
 
 ### D10 — The resync toast string is chosen, and dormant. Ratified 2026-09-22. (§6.10 → R7)
 

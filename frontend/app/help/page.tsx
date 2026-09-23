@@ -82,9 +82,9 @@ const HelpPage = () => {
         <div className={`h-16 fixed top-0 w-full bg-black border-b`}>
           <div className={`flex items-center justify-between px-2 h-full`}>
             <Link href={`/`}>
-              <IoIosArrowBack className={`text-2xl color`} />
+              <IoIosArrowBack className={`text-2xl`} />
             </Link>
-            <h1 className={`${josephinBold.className} text-2xl color`}>Help</h1>
+            <h1 className={`${josephinBold.className} text-2xl`}>Help</h1>
             <div />
           </div>
         </div>
@@ -100,12 +100,12 @@ const HelpPage = () => {
             ) => (
               <AccordionItem value={question.value} key={index}>
                 <AccordionTrigger
-                  className={`text-whtie ${josephinBold.className} font text-3xl px-6`}
+                  className={`${josephinBold.className} text-3xl px-6`}
                 >
                   {question.title}
                 </AccordionTrigger>
                 <AccordionContent
-                  className={`color text-xl px-6`}
+                  className={`text-neutral-300 text-xl px-6`}
                 >
                   {question.description}
                 </AccordionContent>

@@ -222,7 +222,7 @@ const MakeOffer = ({
                 <button
                   type="button"
                   className={` border
-                  ${!offer?.offer?.amount ? "border-white" : `border-red-700`}
+                  ${!offer?.offer?.amount ? "border-white" : `border-money-out`}
                      w-48 p-3 rounded-md`}
                   onClick={() => setView("offer_amount")}
                 >
@@ -230,6 +230,7 @@ const MakeOffer = ({
                     "Cash"
                   ) : (
                     <span className={numeralFace}>
+                      {"\u2212"}
                       {formatMoney(offer?.offer?.amount)}
                     </span>
                   )}
@@ -241,12 +242,13 @@ const MakeOffer = ({
                   ${
                     (offer?.offer?.properties?.length ?? 0) === 0
                       ? "border-white"
-                      : `border-red-700`
+                      : `border-money-out`
                   }
                     p-3 rounded-md`}
                 >
                   {(offer.offer.properties?.length ?? 0) > 0 && (
                     <span className={numeralFace}>
+                      {"\u2212"}
                       {offer.offer.properties?.length}
                     </span>
                   )}{" "}
@@ -274,7 +276,7 @@ const MakeOffer = ({
                   ${
                     !offer?.request?.amount
                       ? "border-white"
-                      : `border-green-700`
+                      : `border-money-in`
                   }
 
                     border p-3 rounded-md w-48`}
@@ -283,7 +285,7 @@ const MakeOffer = ({
                     "Cash"
                   ) : (
                     <span className={numeralFace}>
-                      {formatMoney(offer.request.amount)}
+                      +{formatMoney(offer.request.amount)}
                     </span>
                   )}
                 </button>
@@ -293,14 +295,14 @@ const MakeOffer = ({
                   ${
                     (offer?.request?.properties?.length ?? 0) === 0
                       ? "border-white"
-                      : `border-green-700`
+                      : `border-money-in`
                   }
                     border p-3 rounded-md`}
                   onClick={() => setView("request_properties")}
                 >
                   {(offer.request.properties?.length ?? 0) > 0 && (
                     <span className={numeralFace}>
-                      {offer.request.properties?.length}
+                      +{offer.request.properties?.length}
                     </span>
                   )}{" "}
                   Properties
@@ -311,7 +313,7 @@ const MakeOffer = ({
                   ${
                     offer?.request?.immunity.length === 0
                       ? "border-white"
-                      : `border-green-700`
+                      : `border-money-in`
                   }
                     border border-white p-3 rounded-md`}
                 >

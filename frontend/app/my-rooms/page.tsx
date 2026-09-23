@@ -50,9 +50,13 @@ const NoExistingRoomsFound = () => {
     <div
       className={`font-semibold flex items-center justify-center gap-y-4 flex-col w-full h-[50vh]`}
     >
-      <p className={`color`}>No rooms found</p>
-      <Link href="/join">Join Room</Link>
-      <Link href="/create">Create Room</Link>
+      <p className={`text-neutral-400`}>No rooms found</p>
+      <Link href="/join" tone="plain">
+        Join Room
+      </Link>
+      <Link href="/create" tone="plain">
+        Create Room
+      </Link>
     </div>
   );
 };
@@ -64,7 +68,7 @@ const ExistingRooms = ({ rooms }: { rooms: string[] }) => {
         <NextLink
           key={index}
           href={`/room/${room}`}
-          className={`font ${numeralFace} text-2xl`}
+          className={`${numeralFace} text-2xl`}
         >
           {room}
         </NextLink>
@@ -88,14 +92,14 @@ const Header = () => {
 const BackButton = () => {
   return (
     <NextLink href={`/`} className={`absolute left-2 top-4`}>
-      <IoIosArrowBack className={`text-2xl color`} />
+      <IoIosArrowBack className={`text-2xl`} />
     </NextLink>
   );
 };
 
 const Heading = () => {
   return (
-    <h1 className={`${josephinNormal.className} px-8 text-2xl color`}>
+    <h1 className={`${josephinNormal.className} px-8 text-2xl`}>
       Existing Rooms
     </h1>
   );

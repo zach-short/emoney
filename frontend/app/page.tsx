@@ -41,7 +41,7 @@ const Header = () => {
 const MyExistingRoomsButton = () => {
   return (
     <NextLink href={`/my-rooms`}>
-      <IoDiceOutline className={`top-2 right-2 absolute color text-2xl`} />
+      <IoDiceOutline className={`top-2 right-2 absolute text-2xl`} />
     </NextLink>
   );
 };
@@ -50,7 +50,7 @@ const HelpButton = () => {
   return (
     <NextLink href={`/help`}>
       <GrHelpBook
-        className={`top-[.6rem] right-10 absolute color text-[1.4rem] leading-3`}
+        className={`top-[.6rem] right-10 absolute text-[1.4rem] leading-3`}
       />
     </NextLink>
   );
