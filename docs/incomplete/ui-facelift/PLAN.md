@@ -498,7 +498,7 @@ cd frontend && bun run build
 
 ### Phase 3 — Materials, elevation and the toast
 
-**Status: `BUILT 2026-09-22`, commit `<pending — Zach commits>`. Lane 1. Driver: Opus 5 (the
+**Status: `BUILT 2026-09-22`, commit `be5080e` (37 files, +738/-123). Lane 1. Driver: Opus 5 (the
 assigned driver; the session checked its own model against this line before reading anything).
 Waited on: Phase 1 — built on `e144d6f`, which is Phase 2.**
 Implements **D4**, **D2** and **D9(a)**. Took **BD-7**…**BD-12** while building, all in §1 with
