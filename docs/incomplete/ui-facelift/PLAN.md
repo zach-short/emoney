@@ -286,8 +286,8 @@ which for this phase is the whole of it:
 ### Phase 2 — Type, and one money formatter
 
 **Status: `BUILT` 2026-09-22, Opus 5, in worktree `.claude/worktrees/ui-facelift` (branch
-`worktree-ui-facelift`, on top of `d76e4b3`). Commit hash to be recorded here once Zach commits,
-as Phase 1's was. 36 files, +321/-182. NOT merged to `main`.** Lane 1. Implements **D3**; took
+`worktree-ui-facelift`, on top of `d76e4b3`). **Committed by Zach as `34be5ac`** — 39 files,
++553/-184. NOT merged to `main`.** Lane 1. Implements **D3**; took
 **BD-5** and **BD-6** while building. Frontend only; nothing in `backend/` was touched.
 
 **Gates — all run from `frontend/` after the last edit, 2026-09-22.** `bun run lint`: **76 files,
