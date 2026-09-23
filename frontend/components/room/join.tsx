@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { josephinBold } from "@/components/ui/fonts";
 import { ColorSelect } from "../players/color-select-drawer";
-import Link from "../ui/cusotm-link";
+import CustomLink from "../ui/custom-link";
 import Button from "../ui/button-custom";
 import { playerStore } from "@/lib/utils/playerHelpers";
 import { InitialJoinRoomFormData, JoinRoomFormData } from "./utils";
@@ -32,7 +32,7 @@ const JoinRoomForm = () => {
   const { execute: joinRoomExecute, loading: joining } = usePublicAction(
     playerApi.join,
     {
-      onSuccess(data: { roomCode: string; playerId: string }) {
+      onSuccess(data) {
         playerStore.setPlayerIdForRoom(data.roomCode, data.playerId);
         router.push(`/room/${data.roomCode}`);
       },
@@ -52,7 +52,7 @@ const JoinRoomForm = () => {
       // branch never fired. Every returning player was sent to the
       // create-a-player form, where the backend then refused them with "Name
       // or color already taken": there was no way back into your own game.
-      onSuccess(data: { player?: { id?: string } }) {
+      onSuccess(data) {
         if (data?.player?.id) {
           router.push(`/room/${formData.roomCode}`);
         } else {
@@ -137,7 +137,7 @@ const JoinRoomForm = () => {
 
   return (
     <div className="relative h-screen">
-      <Link text="E-Money" href="/" className="top-2 left-2" />
+      <CustomLink text="E-Money" href="/" className="top-2 left-2" />
       <div
         className={`flex flex-col items-center justify-center h-full ${josephinBold.className}`}
       >
