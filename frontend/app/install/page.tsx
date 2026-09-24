@@ -48,11 +48,11 @@ function InstallPrompt() {
 
   if (isStandalone) {
     return (
-      <div className="font flex justify-center items-center h-screen select-none">
+      <div className="flex justify-center items-center h-screen select-none">
         <CustomLink text="E-Money" href="/" className="top-2 left-2" />
         <Link
           href="/"
-          className={`border font rounded-lg p-4 border-yellow-200 w-64  text-black text-2xl`}
+          className={`border border-border rounded-lg p-4 w-64 text-center text-2xl`}
         >
           Home
         </Link>
@@ -64,10 +64,12 @@ function InstallPrompt() {
     <div className="flex flex-col space-y-3 justify-center items-center h-screen select-none">
       <CustomLink text="E-Money" href="/" className="top-2 left-2" />
       {deferredPrompt && (
-        <Button onClick={handleInstallClick}>Install E-Money</Button>
+        <Button onClick={handleInstallClick} tone="plain">
+          Install E-Money
+        </Button>
       )}
       {isIOS && (
-        <p className={`text-black`}>
+        <p>
           To install this app on your iOS device, tap the share button
           <span role="img" aria-label="share icon">
             {" "}

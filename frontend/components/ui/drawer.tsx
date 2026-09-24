@@ -28,7 +28,18 @@ const DrawerOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 z-50 bg-black/80", className)}
+    // The scrim (DESIGN.md D4, PLAN.md section 3 dials: black/55% + 12px blur).
+    // `bg-black/80` over a black room did not make the room recede, it deleted
+    // it -- measured 2026-09-22 -- so a drawer read as a full-screen page
+    // rather than a sheet over a room. 55% subdues; the blur is what says
+    // "there is still a room back there". The radius is a pre-authorised dial:
+    // lower it if a mid-range Android stutters, never raise it without a
+    // measurement (`backdrop-filter` is the most expensive thing in this work
+    // and the repo has no performance baseline at all).
+    className={cn(
+      "fixed inset-0 z-50 bg-black/55 backdrop-blur-[12px]",
+      className
+    )}
     {...props}
   />
 ))
@@ -46,7 +57,7 @@ const DrawerContent = React.forwardRef<
         // inset-x-0 + max-width + auto margins centres the sheet on wide
         // screens without a transform -- vaul owns the inline transform for
         // the drag/snap animation, so a translate class here would be lost.
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background shadow-modal",
         "sm:mx-auto sm:max-w-2xl sm:rounded-t-2xl",
         className
       )}

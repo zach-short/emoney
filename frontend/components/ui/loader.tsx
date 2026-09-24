@@ -1,9 +1,7 @@
-import { josephinBold } from "./fonts";
-
 const Loader = () => {
   return (
     <>
-      <div id={`loading ${josephinBold.className}`}>
+      <div id={`loading`}>
         <div className={`dice `}>
           <div className="front">1</div>
           <div className="back">6</div>

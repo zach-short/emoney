@@ -1,5 +1,5 @@
 import { Player } from "@/types/schema";
-import { josephinBold, josephinNormal } from "../ui/fonts";
+import { josephinBold } from "../ui/fonts";
 import { useState } from "react";
 import {
   Dialog,
@@ -250,7 +250,7 @@ const PlayerTags = ({
             onClick={() => setSelectedTag(tag)}
             className={`
             inline-flex items-center px-2 py-1 rounded-full
-            ${tag.color} text-white text-sm ${josephinBold.className}
+            ${tag.color} text-white text-sm font-semibold
             transform hover:scale-105 transition-transform cursor-pointer
           `}
           >
@@ -264,7 +264,14 @@ const PlayerTags = ({
         open={selectedTag !== null}
         onOpenChange={() => setSelectedTag(null)}
       >
-        <DialogContent className="sm:max-w-[425px] text-black">
+        {/* BD-4's pin is cleared here (PLAN.md Phase 3 item 7): the
+            interior below was restyled for the dark ground FIRST, and only
+            then did the `bg-white text-black` come off. The dialog now takes
+            `bg-background`/`--foreground` like every other surface. The tag's
+            own colour stays on the title banner -- the six tag colours are
+            identity, not chrome, and Zach parked them out of this phase
+            2026-09-22. */}
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle
               className={`flex items-center gap-2 ${selectedTag?.color} text-white p-2 rounded-lg ${josephinBold.className}`}
@@ -275,24 +282,12 @@ const PlayerTags = ({
           </DialogHeader>
           <div className=" space-y-4">
             <div>
-              <h4
-                className={`${josephinBold.className} text-lg mb-2 text-black`}
-              >
-                Description
-              </h4>
-              <p className={`text-black ${josephinNormal.className}`}>
-                {selectedTag?.description}
-              </p>
+              <h4 className={`font-semibold text-lg mb-2`}>Description</h4>
+              <p className={`text-neutral-300`}>{selectedTag?.description}</p>
             </div>
             <div>
-              <h4
-                className={`${josephinBold.className} text-lg mb-2 text-black`}
-              >
-                How to Earn
-              </h4>
-              <p className={`text-black ${josephinNormal.className}`}>
-                {selectedTag?.howToEarn}
-              </p>
+              <h4 className={`font-semibold text-lg mb-2`}>How to Earn</h4>
+              <p className={`text-neutral-300`}>{selectedTag?.howToEarn}</p>
             </div>
           </div>
         </DialogContent>

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Offer, OfferNoID, Player } from "@/types/schema";
-import { josephinBold } from "../ui/fonts";
+import { josephinBold, numeralFace } from "../ui/fonts";
 import { PlayerDetails } from "./player-card-content";
 import {
   BankerTransactionPayload,
@@ -108,13 +108,14 @@ const PlayerCard = ({
                     <span
                       className={`rounded-full bg-black px-3 py-1 text-base text-white`}
                     >
-                      {waitingOnMe} {waitingOnMe === 1 ? "offer" : "offers"}
+                      <span className={numeralFace}>{waitingOnMe}</span>{" "}
+                      {waitingOnMe === 1 ? "offer" : "offers"}
                     </span>
                   )}
                 </button>
               </DrawerTrigger>
               <DrawerContent
-                className={`overflow-y-auto ${DRAWER_MIN_HEIGHT_TALL} bg-black`}
+                className={`overflow-y-auto ${DRAWER_MIN_HEIGHT_TALL}`}
               >
                 <DrawerTitle className={`sr-only`}>
                   {isSelf ? "Your offers" : "Make an offer"}
@@ -155,6 +156,9 @@ const PlayerCard = ({
               onKickPlayer={onKickPlayer}
               allPlayers={allPlayers}
               roomId={roomId}
+              // F2's glance popover counts the offers pending between these two
+              // players (D6); the card face itself does not read them.
+              offers={offers}
             />
           </div>
         </div>

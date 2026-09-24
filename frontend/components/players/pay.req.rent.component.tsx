@@ -1,7 +1,8 @@
 import { Player, Property } from "@/types/schema";
 import { useEffect, useEffectEvent, useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
-import { josephinBold } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { calculateRent } from "../ui/helper-funcs";
 import { toast } from "sonner";
 import { DrawerClose } from "../ui/drawer";
@@ -84,7 +85,7 @@ const PayRequestRent = ({
   if (!properties || properties?.length === 0) {
     return (
       <div className="flex items-start justify-center h-full">
-        <p className={`text-sm ${josephinBold.className} text-white`}>
+        <p className={`text-sm font-semibold text-white`}>
           {type === "REQUEST"
             ? `You don't have any properties to request rent for`
             : `${toPlayer.name} doesn't have any properties to pay rent for`}
@@ -197,7 +198,7 @@ const PayRequestRent = ({
           {selectedGroup === "utility" && (
             <div className={`relative`}>
               <input
-                className={`w-24 pt-4 pl-1 border rounded text-black`}
+                className={`w-24 pt-4 pl-1 border rounded text-black ${numeralFace}`}
                 value={roll}
                 onChange={(e) => {
                   const inputValue = e.target.value;
@@ -234,8 +235,8 @@ const PayRequestRent = ({
             <div className="bg-gray-800 rounded-lg p-4 space-y-4">
               <div className="flex justify-between items-center">
                 <span>Amount:</span>
-                <span className="text-xl">
-                  ${transactionDetails?.amount || 0}
+                <span className={`text-xl ${numeralFace}`}>
+                  {formatMoney(transactionDetails?.amount)}
                 </span>
               </div>
               <div className="text-sm opacity-80">
@@ -247,16 +248,25 @@ const PayRequestRent = ({
           <div className="space-y-4">
             <h3 className="text-lg">Updated Balances</h3>
             <div className="bg-gray-800 rounded-lg p-4 space-y-3">
+              {/* These are the balances AFTER the transaction, and the
+                  red/green was the only thing saying which of them went down.
+                  D2 promotes the pair to the money-direction tokens and adds
+                  the signed delta beside each -- the glyph belongs on the
+                  change, not on the balance, because the balance itself is
+                  not negative. */}
               <div className="flex justify-between">
                 <span>{balances.payingPlayerName}</span>
-                <span className="text-red-400">
-                  ${balances?.payingBalance || fromPlayer.balance}
+                <span className={`text-money-out ${numeralFace}`}>
+                  {formatMoney(balances?.payingBalance || fromPlayer.balance)}{" "}
+                  ({"\u2212"}
+                  {formatMoney(transactionDetails?.amount)})
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>{balances?.receivingPlayerName}</span>
-                <span className="text-green-400">
-                  ${balances?.receivingBalance || toPlayer.balance}
+                <span className={`text-money-in ${numeralFace}`}>
+                  {formatMoney(balances?.receivingBalance || toPlayer.balance)}{" "}
+                  (+{formatMoney(transactionDetails?.amount)})
                 </span>
               </div>
             </div>
@@ -264,7 +274,7 @@ const PayRequestRent = ({
 
           <DrawerClose asChild className="w-full">
             <button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg mt-4"
+              className="w-full border border-border bg-white/[0.06] hover:bg-white/[0.12] text-white py-3 rounded-lg mt-4 font-semibold shadow-raised transition-colors"
               onClick={handleConfirmTransaction}
             >
               Confirm {type === "SEND" ? "Payment" : "Request"}
@@ -276,7 +286,7 @@ const PayRequestRent = ({
   };
 
   return (
-    <div className={`space-y-4 text-2xl ml-2 mt-2 ${josephinBold.className}`}>
+    <div className={`space-y-4 text-2xl ml-2 mt-2`}>
       {currentView === "confirmation" ? (
         renderConfirmationView()
       ) : currentView === "properties" ? (

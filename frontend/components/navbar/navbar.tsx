@@ -9,7 +9,8 @@ import {
   DrawerTrigger,
 } from "../ui/drawer";
 import { AiOutlineMenu } from "react-icons/ai";
-import { josephinBold, josephinNormal } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import SelectColorProperties from "../players/purchase-properties-bank";
 import { useState } from "react";
 import Link from "next/link";
@@ -94,7 +95,7 @@ const Navbar = ({
           </button>
         </DrawerTrigger>
         <DrawerContent
-          className={`${josephinNormal.className} ${DRAWER_HEIGHT_STANDARD} bg-black border-[1px] px-3 text-xl `}
+          className={`${DRAWER_HEIGHT_STANDARD} border-[1px] px-3 text-xl `}
         >
           <DrawerTitle className={`sr-only`}>Menu</DrawerTitle>
           <DrawerDescription className={`sr-only`}>
@@ -107,7 +108,7 @@ const Navbar = ({
             {view === "properties" ? (
               <>
                 <div
-                  className={`${josephinBold.className} bg-black h-full  text-2xl overflow-y-auto`}
+                  className={`bg-black h-full  text-2xl overflow-y-auto font-semibold`}
                 >
                   <DrawerTitle className={`sr-only`}>
                     Properties for Sale
@@ -134,7 +135,7 @@ const Navbar = ({
                   className={`event-history-container overflow-y-auto pb-20`}
                 >
                   {eventHistory.map((event: EventHistory, index: number) => (
-                    <div className={`${josephinNormal.className}`} key={index}>
+                    <div key={index}>
                       <div className="flex justify-between rounded-full items-center mb-2 py-1 sm:py-2">
                         <span className={`text-xs sm:text-sm`}>
                           <div className={`flex justify-start items-start`}>
@@ -169,7 +170,9 @@ const Navbar = ({
                     onClick={() => setView("properties")}
                   >
                     <span>Bank&apos;s Properties</span>
-                    <span>{availableProperties?.length || 0}</span>
+                    <span className={numeralFace}>
+                      {availableProperties?.length || 0}
+                    </span>
                   </button>
                 </li>
                 <li>
@@ -179,7 +182,7 @@ const Navbar = ({
                     onClick={() => setView("freeParking")}
                   >
                     <span>Free Parking</span>
-                    <span>${freeParking}</span>
+                    <span className={numeralFace}>{formatMoney(freeParking)}</span>
                   </button>
                 </li>
                 <li>
@@ -189,7 +192,7 @@ const Navbar = ({
                     onClick={() => setView("events")}
                   >
                     <span>Event History</span>
-                    <span>{eventHistory.length}</span>
+                    <span className={numeralFace}>{eventHistory.length}</span>
                   </button>
                 </li>
                 <li>
@@ -203,7 +206,7 @@ const Navbar = ({
                         toast.success("Room code copied to clipboard!", {
                           duration: 2000,
                           icon: "📋",
-                          className: `${josephinBold.className}`,
+                          className: `font-semibold`,
                         });
                       })
                       .catch(() => {
@@ -214,7 +217,7 @@ const Navbar = ({
                     <span>Room Code</span>
                     <span className={`flex items-center`}>
                       <IoCopyOutline className={`mr-1`} />
-                      {roomCode}
+                      <span className={numeralFace}>{roomCode}</span>
                     </span>
                   </button>
                 </li>
@@ -259,9 +262,7 @@ const Navbar = ({
         open={confirmClear !== null}
         onOpenChange={(open) => !open && setConfirmClear(null)}
       >
-        <DialogContent
-          className={`sm:max-w-[425px] ${josephinBold.className} text-black`}
-        >
+        <DialogContent className={`sm:max-w-[425px]`}>
           <DialogHeader>
             <DialogTitle>
               {confirmClear === "all"
@@ -269,9 +270,7 @@ const Navbar = ({
                 : "Delete your player in this game?"}
             </DialogTitle>
           </DialogHeader>
-          <DialogDescription
-            className={`${josephinNormal.className} text-sm text-black`}
-          >
+          <DialogDescription className={`text-sm text-neutral-300`}>
             {confirmClear === "all"
               ? "This clears every room's saved player from this device. You won't be able to rejoin any of them as the same player."
               : "This clears this room's saved player from this device. You won't be able to rejoin as the same player."}

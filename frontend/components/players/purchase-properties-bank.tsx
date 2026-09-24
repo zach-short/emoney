@@ -1,7 +1,8 @@
 import { Player, Property } from "@/types/schema";
 import { useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
-import { josephinBold } from "../ui/fonts";
+import { numeralFace } from "../ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { toast } from "sonner";
 import { DrawerClose } from "../ui/drawer";
 import PropertyCard from "../property/cards/card";
@@ -28,7 +29,7 @@ const SelectColorProperties = ({
   if (!properties || properties.length === 0 || !player) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className={`text-xl ${josephinBold.className} text-white`}>
+        <p className={`text-xl font-semibold text-white`}>
           No Properties Found
         </p>
       </div>
@@ -95,7 +96,9 @@ const SelectColorProperties = ({
             <div className="bg-gray-800 rounded-lg p-4 space-y-2">
               <div className="flex justify-between items-center">
                 <span>Price:</span>
-                <span className="text-xl">${selectedProperty.price}</span>
+                <span className={`text-xl ${numeralFace}`}>
+                  {formatMoney(selectedProperty.price)}
+                </span>
               </div>
               <div className="text-sm opacity-80">{selectedProperty.name}</div>
             </div>
@@ -106,14 +109,21 @@ const SelectColorProperties = ({
             <div className="bg-gray-800 rounded-lg p-4">
               <div className="flex justify-between">
                 <span>{player.name}</span>
-                <span className="text-yellow-400">${newBalance}</span>
+                {/* Was `text-yellow-400`: a money figure wearing the
+                    identity colour, which D2 reserves for the wordmark and
+                    the three primary actions. A purchase is money out, so it
+                    takes the money-out token and the signed delta. */}
+                <span className={`text-money-out ${numeralFace}`}>
+                  {formatMoney(newBalance)} ({"\u2212"}
+                  {formatMoney(selectedProperty.price)})
+                </span>
               </div>
             </div>
           </div>
 
           <DrawerClose asChild className="w-full">
             <button
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg mt-4"
+              className="w-full border border-border bg-white/[0.06] hover:bg-white/[0.12] text-white py-3 rounded-lg mt-4 font-semibold shadow-raised transition-colors"
               onClick={handleConfirmPurchase}
             >
               Confirm Purchase
@@ -125,7 +135,7 @@ const SelectColorProperties = ({
   };
 
   return (
-    <div className={`space-y-2 text-2xl  ${josephinBold.className}`}>
+    <div className={`space-y-2 text-2xl`}>
       {currentView === "confirmation" ? (
         renderConfirmationView()
       ) : currentView === "properties" ? (
@@ -149,7 +159,9 @@ const SelectColorProperties = ({
                     onClick={() => handlePropertySelect(property)}
                   />
                   <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-2 text-center">
-                    <span className="text-lg">${property?.price}</span>
+                    <span className={`text-lg ${numeralFace}`}>
+                      {formatMoney(property?.price)}
+                    </span>
                   </div>
                 </div>
               ))}

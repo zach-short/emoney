@@ -1,4 +1,5 @@
-import { josephinBold } from "@/components/ui/fonts";
+import { numeralFace } from "@/components/ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { OfferNoID } from "@/types/schema";
 import { useState } from "react";
 import { FaDollarSign } from "react-icons/fa";
@@ -54,23 +55,31 @@ const Amount = ({
     return (requestAmount / balance) * 100;
   });
 
+  // D2: red and green mean money direction and nothing else here, and they
+  // never carry that meaning alone. `offer` is money leaving this player,
+  // `request` is money arriving, and the glyph says so without the colour.
+  const sign = type === "offer" ? "\u2212" : "+";
+
   return (
     <div className="flex flex-col gap-2">
-      <p className={`${josephinBold.className} text-xl mt-4`}>
+      <p className={`text-xl mt-4 font-semibold`}>
         {type === "offer" ? "Your" : `${name}'s`} balance:{" "}
-        {balance.toLocaleString()}
+        {/* Was `balance.toLocaleString()`, which rendered `1,500` against the
+            player card's `$1875` for the same number. Both now go through the
+            one formatter (DESIGN.md D3(a)). */}
+        <span className={numeralFace}>{formatMoney(balance)}</span>
       </p>
       <div className={`flex w-full items-center gap-x-3`}>
         {[10, 25, 50, 75, 100].map((num: number, index: number) => (
           <button
             key={index}
             className={`
-            border w-24 p-2 rounded-full
+            border w-24 p-2 rounded-full ${numeralFace}
             ${
               percent === num
                 ? type === "offer"
-                  ? "border-red-700"
-                  : "border-green-700"
+                  ? "border-money-out"
+                  : "border-money-in"
                 : "border-white"
             }
           `}
@@ -87,18 +96,27 @@ const Amount = ({
               }
             }}
           >
+            {/* The sign is on every button, not only the selected one: it is
+                what says which side of the trade this column is, and D2's
+                hedge is that the red/green must never be the only cue. */}
+            {sign}
             {num}%
           </button>
         ))}
       </div>
       <div className={`relative`}>
-        <FaDollarSign
-          className={`absolute left-1 top-1/2 transform -translate-y-1/2 text-4xl ${
-            type === "offer" ? "text-red-700" : "text-green-700"
+        <span
+          aria-hidden
+          className={`absolute left-1 top-1/2 flex -translate-y-1/2 transform items-center text-4xl ${
+            type === "offer" ? "text-money-out" : "text-money-in"
           }`}
-        />
+        >
+          {sign}
+          <FaDollarSign />
+        </span>
         <input
           type="text"
+          aria-label={`${type === "offer" ? "Offer" : "Request"} amount in dollars`}
           value={displayValue}
           onChange={handleChange}
           placeholder={`${type === "offer" ? "Offer" : "Request"} Amount`}
@@ -108,7 +126,7 @@ const Amount = ({
               e.preventDefault();
             }
           }}
-          className={`${josephinBold.className} bg-black text-white border rounded py-6 w-full pl-10 text-sm`}
+          className={`${numeralFace} bg-white/[0.04] text-white border rounded py-6 w-full pl-14 text-sm`}
         />
       </div>
     </div>

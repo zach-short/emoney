@@ -1,8 +1,9 @@
 "use client";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Offer, OfferNoID, Player, Property, Trade } from "@/types/schema";
 import { RespondOfferPayload } from "@/types/payloads";
-import { josephinBold, josephinNormal } from "@/components/ui/fonts";
+import { josephinBold } from "@/components/ui/fonts";
+import { DeedPopover } from "@/components/property/deed-popover";
 import MakeOffer from "./make-offer";
 
 // Every user-facing string in one place. Warm register, matching the kick
@@ -36,34 +37,77 @@ const copy = {
   someone: "Someone",
 };
 
+// A deed named inside an offer. Below `lg` it is the plain text it always was;
+// at `lg` it is F1's popover trigger (D6) -- and this is F1's strongest case,
+// because an offer names deeds whose terms are otherwise unreachable from here.
+// There is no path at all from an offer to a rent ladder today.
+//
+// Two renderings rather than one element that stops responding below `lg`, so
+// that a phone never has a focusable control in its tab order that does
+// nothing -- the mistake `property/cards/card-container.tsx` documents.
+const DeedName = ({ deed }: { deed: Property }) => (
+  <>
+    <span className={`lg:hidden`}>{deed.name}</span>
+    <DeedPopover property={deed}>
+      <button
+        type="button"
+        className={`hidden underline decoration-dotted underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white lg:inline`}
+      >
+        {deed.name}
+      </button>
+    </DeedPopover>
+  </>
+);
+
 // One side of a trade as prose, from the same deed list every card already
 // carries: "Baltic Avenue and $200", "$200", "Baltic Avenue", or "nothing".
 // The same shape as `sideDescription` in `backend/websocket/offers.go`, which
 // writes the settled record; a deed not found in the room reads as "a
 // property" there too.
+//
+// Nodes rather than one joined string as of 2026-09-23, so each resolved deed
+// can carry F1's trigger. The prose it builds is unchanged, including the
+// `$${amount}` form: that mirrors `sideDescription` on the Go side, which
+// writes the settled record, so it is deliberately NOT routed through
+// `formatMoney()` here. Raised separately instead.
 const describeSide = (side: Trade, deeds: Map<string, Property>) => {
-  const parts = (side.properties ?? []).map(
-    (id) => deeds.get(id)?.name ?? "a property"
-  );
-  if ((side.amount ?? 0) > 0) parts.push(`$${side.amount}`);
+  const parts: { key: string; node: React.ReactNode }[] = (
+    side.properties ?? []
+  ).map((id) => {
+    const deed = deeds.get(id);
+    return { key: id, node: deed ? <DeedName deed={deed} /> : "a property" };
+  });
+  if ((side.amount ?? 0) > 0)
+    parts.push({ key: "amount", node: `$${side.amount}` });
   if (parts.length === 0) return copy.nothing;
-  if (parts.length === 1) return parts[0];
-  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  return (
+    <>
+      {parts.map((part, index) => (
+        // Keyed on the deed id, never on position (PLAN.md section 5): every
+        // refetch replaces the room object whole, so these arrays are rebuilt
+        // with new identities on every socket message.
+        <Fragment key={part.key}>
+          {index > 0 && (index === parts.length - 1 ? " and " : ", ")}
+          {part.node}
+        </Fragment>
+      ))}
+    </>
+  );
 };
 
-const ROW = `${josephinNormal.className} text-base`;
+const ROW = `text-base`;
 const ACTION =
   "rounded-full border px-4 py-2 text-base transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white";
 
 const Note = ({ heading, note }: { heading: string; note: string }) => (
   <div className={`mt-2 border-l-2 border-neutral-500 pl-3`}>
-    <p className={`${josephinBold.className} text-sm text-neutral-300`}>
+    <p className={`font-semibold text-sm text-neutral-300`}>
       {heading}
     </p>
-    <p className={`${josephinNormal.className} text-base whitespace-pre-wrap`}>
+    <p className={`text-base whitespace-pre-wrap`}>
       &ldquo;{note}&rdquo;
     </p>
-    <p className={`${josephinNormal.className} mt-1 text-xs text-neutral-500`}>
+    <p className={`mt-1 text-xs text-neutral-500`}>
       {copy.noteCaption}
     </p>
   </div>
@@ -122,7 +166,7 @@ const OffersInbox = ({
       <section className={`w-full px-2`}>
         <button
           type="button"
-          className={`border py-4 rounded w-full mt-5 text-2xl ${josephinBold.className}`}
+          className={`border py-4 rounded w-full mt-5 text-2xl font-semibold`}
           onClick={() => setCountering(null)}
         >
           {copy.back}
@@ -151,7 +195,7 @@ const OffersInbox = ({
 
       {forYou.length === 0 && fromYou.length === 0 && (
         <p
-          className={`${josephinNormal.className} mt-8 text-center text-lg text-neutral-400`}
+          className={`mt-8 text-center text-lg text-neutral-400`}
         >
           {copy.empty}
         </p>
@@ -168,7 +212,7 @@ const OffersInbox = ({
               const confirming = confirmingId === o.id;
               return (
                 <li key={o.id} className={`rounded-md border p-3`}>
-                  <p className={`${josephinBold.className} text-xl`}>
+                  <p className={`font-semibold text-xl`}>
                     {from}
                     {o.counterOf ? " counters" : " offers"}
                   </p>
@@ -184,13 +228,13 @@ const OffersInbox = ({
 
                   {confirming ? (
                     <div className={`mt-3 flex flex-col gap-y-2`}>
-                      <p className={`${josephinNormal.className} text-sm`}>
+                      <p className={`text-sm`}>
                         {copy.acceptWarning}
                       </p>
                       <div className={`flex flex-wrap gap-2`}>
                         <button
                           type="button"
-                          className={`${ACTION} ${josephinBold.className} border-green-500 bg-green-700 hover:bg-green-600`}
+                          className={`${ACTION} font-semibold border-white bg-white/[0.14] hover:bg-white/[0.22]`}
                           onClick={() => {
                             onRespondOffer(o.id, "ACCEPT");
                             setConfirmingId(null);
@@ -216,7 +260,7 @@ const OffersInbox = ({
                     <div className={`mt-3 flex flex-wrap gap-2`}>
                       <button
                         type="button"
-                        className={`${ACTION} ${josephinBold.className} border-green-500 hover:bg-green-700`}
+                        className={`${ACTION} font-semibold border-white hover:bg-white/[0.14]`}
                         onClick={() => setConfirmingId(o.id)}
                       >
                         {copy.accept}
@@ -230,7 +274,7 @@ const OffersInbox = ({
                       </button>
                       <button
                         type="button"
-                        className={`${ACTION} border-red-500 hover:bg-red-700`}
+                        className={`${ACTION} border-neutral-500 hover:bg-white/10`}
                         onClick={() => onRespondOffer(o.id, "DENY")}
                       >
                         {copy.decline}
@@ -252,7 +296,7 @@ const OffersInbox = ({
           <ul className={`mt-2 flex flex-col gap-y-3`}>
             {fromYou.map((o) => (
               <li key={o.id} className={`rounded-md border p-3`}>
-                <p className={`${josephinBold.className} text-xl`}>
+                <p className={`font-semibold text-xl`}>
                   To {nameOf(o.toPlayerId)}
                 </p>
                 <p className={ROW}>
@@ -267,7 +311,7 @@ const OffersInbox = ({
                 <div className={`mt-3 flex flex-wrap gap-2`}>
                   <button
                     type="button"
-                    className={`${ACTION} border-red-500 hover:bg-red-700`}
+                    className={`${ACTION} border-neutral-500 hover:bg-white/10`}
                     onClick={() => onRespondOffer(o.id, "WITHDRAW")}
                   >
                     {copy.withdraw}

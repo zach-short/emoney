@@ -1,5 +1,6 @@
 import PropertyCard from "@/components/property/cards/card";
-import { josephinBold } from "@/components/ui/fonts";
+import { numeralFace } from "@/components/ui/fonts";
+import { formatMoney } from "@/lib/utils/money";
 import { OfferNoID, Property } from "@/types/schema";
 import { useState } from "react";
 import { MdArrowBackIos } from "react-icons/md";
@@ -31,7 +32,7 @@ const MakeOfferProperties = ({
   if (!properties || properties.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className={`text-xl ${josephinBold.className} text-white`}>
+        <p className={`text-xl font-semibold text-white`}>
           No Properties Found
         </p>
       </div>
@@ -74,7 +75,7 @@ const MakeOfferProperties = ({
   );
 
   return (
-    <div className={`space-y-2 text-2xl  ${josephinBold.className}`}>
+    <div className={`space-y-2 text-2xl`}>
       {currentView === "properties" ? (
         <>
           <h1 className="flex items-center justify-start" onClick={handleBack}>
@@ -92,15 +93,21 @@ const MakeOfferProperties = ({
                       ${
                         isPropertySelected(property.id)
                           ? type === "offer"
-                            ? "bg-red-700"
-                            : "bg-green-700"
+                            ? "bg-money-out"
+                            : "bg-money-in"
                           : ""
                       }
                     `}
                     onClick={() => handlePropertySelect(property)}
                   />
                   <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 p-2 text-center">
-                    <span className="text-lg">${property?.price}</span>
+                    <span className={`text-lg ${numeralFace}`}>
+                      {/* D2: the selected card's red/green says which way this
+                          deed is moving, so the sign says it too. */}
+                      {isPropertySelected(property.id) &&
+                        (type === "offer" ? "\u2212" : "+")}
+                      {formatMoney(property?.price)}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -5,7 +5,6 @@ import RoomView from "@/components/room/room.client";
 import { getWsUrl } from "@/lib/utils/wsHelpers";
 import { useStoredPlayerId } from "@/hooks/use-stored-player-id";
 import { toast } from "sonner";
-import { josephinBold } from "@/components/ui/fonts";
 import { sendMessage } from "@/lib/utils/sendWsMessage";
 import {
   KickPlayerPayload,
@@ -230,7 +229,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
         toast.error(text || "Something went wrong", {
           duration: 4000,
           position: "top-center",
-          className: `${josephinBold.className} text-xs text-center`,
+          className: `font-semibold text-sm text-center`,
         });
         return;
       }
@@ -272,7 +271,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
         duration: 4000,
         icon: getIconForType(message.type),
         position: "top-center",
-        className: `${josephinBold.className} text-xs text-center`,
+        className: `font-semibold text-sm text-center`,
       });
 
       // Every frame that reaches here refetches the inbox, not only the

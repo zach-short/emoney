@@ -3,15 +3,31 @@
 @tailwind utilities;
 
 @layer base {
+  /* One token set, on :root. There is no .dark block and no ThemeProvider:
+     the app is dark-only (DESIGN.md D1, ratified 2026-09-22). The values are a
+     port of the ground the app already rendered by hardcoding `bg-black
+     text-white` on <body> and on six DrawerContents, not a re-colour — D2's
+     palette is Phase 3's work. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 240 5.9% 10%;
-    --primary-foreground: 0 0% 98%;
+    /* Dark-only (D1), declared to the UA. Without this the native form
+       controls, the text caret, autofill and the scrollbars all paint from
+       the light default however the CSS is written -- which is what Phase 1's
+       R1.5 could not get a trustworthy picture of. Part of Phase 3's "what a
+       field is" decision (PLAN.md item 8). */
+    color-scheme: dark;
+
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 0%;
+    --popover-foreground: 0 0% 100%;
+    /* Primary and ring flip with the ground: a filled button and a focus ring
+       have to read on black. Everything below keeps the value it renders with
+       today, so borders, the drawer handle and the destructive button are
+       unchanged. */
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
@@ -22,39 +38,52 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    --ring: 240 4.9% 83.9%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-  }
-  .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+
+    /* The toast's mobile offset dial (PLAN.md section 3: "set to clear the
+       h-16 header"). 64px of header plus a 12px gap, which is the same number
+       the desktop `offset={76}` uses -- one dial, two places it is applied.
+       See the rule near the bottom of this file for why it is a token here
+       and not a `mobileOffset` prop. */
+    --toast-mobile-offset: 76px;
+
+    /* Money direction (DESIGN.md D2). Red and green mean one thing here --
+       which way money moved -- and they are tokens rather than the ad-hoc
+       `red-700`/`green-700`/`red-400`/`green-400`/`green-600`/`blue-600`
+       literals that were spread across six files. Tuned for a near-black
+       ground: Tailwind's 700 ramp is a light-page value and sits too dark on
+       #000 to read at `text-sm`. Every site that uses one of these ALSO
+       carries a sign glyph -- D2's accessibility hedge, because the most
+       common colour-vision deficiency is exactly this pair. */
+    --money-in: 142 64% 52%;
+    --money-out: 4 82% 63%;
+
+    /* Four elevation steps (DESIGN.md D4), replacing the 14 unsystematic
+       shadow utilities the audit counted. Tailwind's stock shadows are tuned
+       for a white page: a black drop shadow on a black ground is invisible,
+       so it draws nothing and the surface reads flat. On a near-black ground
+       elevation is carried by a hairline top highlight -- light falling on the
+       top edge of a raised plane -- plus a wide, soft, very dark shadow. The
+       highlight is what does the work; the shadow only separates.
+
+       flat    - no elevation. Content on the page.
+       raised  - a control: a button, a toggle, a switch track.
+       overlay - something drawn over content but not blocking it: a toast, a
+                 popover (D6/Phase 4), a menu.
+       modal   - a sheet or dialog that owns the screen behind its scrim. */
+    --elevation-flat: 0 0 #0000;
+    --elevation-raised: inset 0 1px 0 0 hsl(0 0% 100% / 0.07),
+      0 1px 2px 0 hsl(0 0% 0% / 0.65);
+    --elevation-overlay: inset 0 1px 0 0 hsl(0 0% 100% / 0.09),
+      0 8px 24px -6px hsl(0 0% 0% / 0.75);
+    --elevation-modal: inset 0 1px 0 0 hsl(0 0% 100% / 0.11),
+      0 24px 56px -12px hsl(0 0% 0% / 0.85);
   }
 }
 
@@ -67,6 +96,16 @@
   }
 }
 
+/* The outlined-text treatment: the one genuinely distinctive thing the
+   product has, and the reason D2 keeps #ffff00 at all. It is identity, so it
+   stays on the wordmark and on the primary action of `/`, `/create` and
+   `/join` -- and it came OFF `/install`, `/my-rooms` and the error fallback,
+   which were borrowing the identity for ordinary links.
+
+   The `.color` rule that used to sit below this one -- `color: yellow
+   !important` -- is gone (D2). It painted the help, dice, install and back
+   icons and three headings yellow through a raw `!important`; they are chrome
+   and now inherit --foreground. */
 .font {
   text-decoration: none;
   text-align: center;
@@ -76,12 +115,39 @@
   text-shadow: 0 0 0 #fff;
   transition: all 250ms;
 }
-.color {
-  color: yellow !important;
-}
 .font:hover {
   text-shadow: 4px 4px 0 #fff;
   transform: translate(-2px, -2px);
+}
+
+/* The toast, at phone widths (DESIGN.md D9(a)).
+   The audit measured the room toast at 390x844 as top: 20, bottom: 72 against
+   a header bottom of 64 -- it sat on the room name. `offset={76}` is set on
+   the Toaster and is correct, but sonner stops honouring it below 600px:
+   `sonner@1.7.1`'s own stylesheet hardcodes
+   `@media (max-width: 600px) { [data-sonner-toaster][data-y-position='top'] { top: 20px } }`
+   (`node_modules/sonner/dist/styles.css:369,397-399`, read 2026-09-22).
+
+   PLAN.md item 5 says to set `mobileOffset`. That prop does not exist in the
+   installed version -- `node_modules/sonner/dist/index.d.ts` declares
+   `offset?: string | number` and `visibleToasts?: number` and nothing else of
+   the kind, and 1.7.1's mobile block defines a single `--mobile-offset` used
+   only for left/right. `mobileOffset`, and the `top: var(--mobile-offset-top)`
+   that would consume it, are sonner 2.x. Upgrading a major version is not
+   something this phase is authorised to do: GATE 2 released exactly two
+   installs, `@radix-ui/react-popover` and `motion`, each inside its own phase.
+
+   So the dial is applied the way the installed version allows: override the
+   hardcoded value at the same breakpoint. `html ` raises specificity to
+   (0,2,1) against sonner's (0,2,0), so this wins on specificity rather than on
+   stylesheet order -- which matters because the vendor CSS is bundled, not
+   authored here, and its position relative to this file is not ours to fix.
+   When sonner is next upgraded past 2.0, delete this block and pass
+   `mobileOffset={{ top: 76 }}` instead. */
+@media (max-width: 600px) {
+  html [data-sonner-toaster][data-y-position="top"] {
+    top: var(--toast-mobile-offset);
+  }
 }
 
 .hide-scrollbar {
@@ -165,9 +231,14 @@ body::-webkit-scrollbar-thumb {
   }
 }
 
+/* The loader's own token block. `--color-theme` was #ffff00: D2 names this
+   :root as one of the two homes of the literal and allows the yellow only on
+   the wordmark and the three primary actions, and a full-screen splash is
+   neither. The dice are now a light grey plane on the black ground, which is
+   also what makes the pips (color: #000 on `.dice div`) still read. */
 :root {
   --length: 80px;
-  --color-theme: #ffff00;
+  --color-theme: hsl(0 0% 88%);
   --color-base: #000;
 }
 
@@ -193,7 +264,7 @@ body::-webkit-scrollbar-thumb {
   margin: var(--length) auto 0;
   letter-spacing: 0.5em;
   text-indent: 0.5em;
-  color: #ffff00;
+  color: hsl(0 0% 88%);
   font-size: 18px;
   animation: blink 1s ease-in-out infinite alternate;
 }

@@ -44,6 +44,11 @@ export default {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
+        // Money direction, the only saturated chrome D2 keeps. Defined here so
+        // `text-money-out` / `border-money-in` replace the six red/green/blue
+        // literals the audit found; the values live on :root in globals.css.
+        "money-in": "hsl(var(--money-in))",
+        "money-out": "hsl(var(--money-out))",
         chart: {
           "1": "hsl(var(--chart-1))",
           "2": "hsl(var(--chart-2))",
@@ -51,6 +56,15 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+      },
+      // The four-step elevation scale (D4). `shadow-flat|raised|overlay|modal`
+      // are the only shadow utilities this app should use; the stock Tailwind
+      // ramp is tuned for a white page and draws nothing on black.
+      boxShadow: {
+        flat: "var(--elevation-flat)",
+        raised: "var(--elevation-raised)",
+        overlay: "var(--elevation-overlay)",
+        modal: "var(--elevation-modal)",
       },
       borderRadius: {
         lg: "var(--radius)",

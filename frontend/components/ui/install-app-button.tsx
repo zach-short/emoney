@@ -15,8 +15,8 @@ const FloatingInstallButton = ({ className }: { className?: string }) => {
 
   return (
     <Link href="/install" className={`${className}`}>
-      <MdOutlineInstallMobile className={`block sm:hidden color text-2xl`} />
-      <MdOutlineInstallDesktop className={`hidden sm:block color text-2xl`} />
+      <MdOutlineInstallMobile className={`block sm:hidden text-2xl`} />
+      <MdOutlineInstallDesktop className={`hidden sm:block text-2xl`} />
     </Link>
   );
 };

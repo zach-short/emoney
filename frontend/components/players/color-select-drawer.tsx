@@ -9,7 +9,6 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { sulpherBold } from "@/components/ui/fonts";
 import { useState } from "react";
 
 const colors = [
@@ -87,7 +86,7 @@ export function ColorSelect({ onColorSelect }: ColorSelectProps) {
         </button>
       </DrawerTrigger>
       <DrawerContent
-        className={`${sulpherBold.className} bg-black text-white max-h-[80vh] overflow-y-auto px-2 pb-4`}
+        className={`max-h-[80vh] overflow-y-auto px-2 pb-4`}
       >
         <DrawerHeader>
           {/* `hidden` took the title out of the accessibility tree too, leaving

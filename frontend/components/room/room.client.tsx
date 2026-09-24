@@ -10,7 +10,7 @@ import {
   Room,
 } from "@/types/schema";
 import Navbar from "../navbar/navbar";
-import { josephinBold } from "../ui/fonts";
+import { josephinBold, numeralFace } from "../ui/fonts";
 import {
   BankerTransactionPayload,
   FreeParkingPayload,
@@ -101,10 +101,22 @@ const RoomView = ({
       {/* A real header box rather than a zero-height sticky wrapper holding two
           absolutely positioned children -- the old one was `bg-white` on a black
           page and only stayed invisible because nothing gave it height. */}
-      <header className="sticky top-0 z-50 bg-black">
+      {/* Translucent with an 8px blur (D4; PLAN.md section 3 dials), so the
+          card strip visibly passes under the header instead of vanishing at a
+          hard edge. The header is thin -- more blur than this reads as smear
+          rather than depth, which is why its dial is lower than the scrim's.
+          The border is the bottom edge the opaque version never needed. */}
+      <header
+        className="sticky top-0 z-50 border-b border-white/10 bg-black/60 backdrop-blur-[8px]"
+      >
         <div className="relative flex h-16 items-center justify-center px-4">
+          {/* A name is a word and keeps the display face; a code is a string of
+              characters that has to be read out loud and typed by someone else,
+              so it gets the numeral face (DESIGN.md D3(a)). */}
           <div
-            className={`${josephinBold.className} select-none text-white text-2xl`}
+            className={`${
+              room?.name ? josephinBold.className : numeralFace
+            } select-none text-white text-2xl`}
           >
             {room?.name || room?.code}
           </div>
