@@ -30,6 +30,7 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { DRAWER_HEIGHT_STANDARD } from "../ui/drawer-sizes";
+import { PanelMove, panelEnter } from "../ui/panel-transition";
 
 // Menu rows were click-handled <div>s: no keyboard focus, no hover state, and
 // nothing telling a mouse user they were targets at all.
@@ -69,7 +70,16 @@ const Navbar = ({
     null
   );
 
-  const returnToMenu = () => setView("menu");
+  // Which way the last swap went, so the new view slides in from that side
+  // (Phase 6 item 3). Cleared when the sheet closes, so reopening it does not
+  // replay a slide on top of the drawer's own.
+  const [move, setMove] = useState<PanelMove>(null);
+  const go = (next: typeof view) => {
+    setMove(next === "menu" ? "back" : "forward");
+    setView(next);
+  };
+
+  const returnToMenu = () => go("menu");
 
   const handleConfirmClear = () => {
     if (confirmClear === "room") {
@@ -84,7 +94,7 @@ const Navbar = ({
 
   return (
     <>
-      <Drawer>
+      <Drawer onOpenChange={(open) => !open && setMove(null)}>
         <DrawerTrigger asChild>
           <button
             type="button"
@@ -103,7 +113,14 @@ const Navbar = ({
             view the event history.
           </DrawerDescription>
 
-          <ul className={`flex flex-col gap-1 h-[75vh] relative`}>
+          {/* Keyed on the view, so each swap mounts a fresh list and its
+              entrance plays. The list is already `relative`, so the transform
+              the entrance applies changes nothing for the absolutely placed
+              Danger Zone inside it. */}
+          <ul
+            key={view}
+            className={`flex flex-col gap-1 h-[75vh] relative ${panelEnter(move)}`}
+          >
             {view !== "menu" && <ReturnToMenu onClick={returnToMenu} />}
             {view === "properties" ? (
               <>
@@ -167,7 +184,7 @@ const Navbar = ({
                   <button
                     type="button"
                     className={MENU_ROW}
-                    onClick={() => setView("properties")}
+                    onClick={() => go("properties")}
                   >
                     <span>Bank&apos;s Properties</span>
                     <span className={numeralFace}>
@@ -179,7 +196,7 @@ const Navbar = ({
                   <button
                     type="button"
                     className={MENU_ROW}
-                    onClick={() => setView("freeParking")}
+                    onClick={() => go("freeParking")}
                   >
                     <span>Free Parking</span>
                     <span className={numeralFace}>{formatMoney(freeParking)}</span>
@@ -189,7 +206,7 @@ const Navbar = ({
                   <button
                     type="button"
                     className={MENU_ROW}
-                    onClick={() => setView("events")}
+                    onClick={() => go("events")}
                   >
                     <span>Event History</span>
                     <span className={numeralFace}>{eventHistory.length}</span>

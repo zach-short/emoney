@@ -367,6 +367,32 @@ a one-frame flash of the end value; see `PLAN.md` BD-18 for its stated cost.
 
 **`player-glance.tsx`'s balance row does not count**; the reason is in `PLAN.md` Phase 5's as-built.
 
+**As built, 2026-09-24 — Phase 6 (`PLAN.md`), the other three moments.** Four moments, no fifth,
+and reduced motion keeps state, as ratified. What deviates, and where it is recorded:
+
+- **All three are CSS (`tailwindcss-animate` under `motion-safe:`), not `motion`**, including the
+  deed and the badge, which §3-E proposed `motion` for. Neither turned out to be a list or a
+  layout animation. The `motion-safe:` media query is live, so Fable's NB-2 (the gate frozen at
+  mount) cannot occur for them. `PLAN.md` BD-20.
+- **"A deed changing hands" is detected from the card's own property ids, not from
+  `PURCHASE_PROPERTY` / `OFFER_ACCEPTED`.** So any deed that moves (a purchase, a trade, an
+  auction lot, a kick) is acknowledged the same way, which is this decision's moment in the
+  player's terms. The acknowledgement is a greyscale wash on the receiving card's Properties row,
+  not a money colour, and the count on every affected card rolls. `PLAN.md` BD-21.
+- **The offer badge sits on the name bar's top-right corner, out of the text line**, so its
+  arrival moves nothing. Inline, it pushed the name. Reserving its room inline was ruled out
+  because names have no length cap. `PLAN.md` BD-19.
+- **Panel transitions are enter-only**: the new panel slides in from the direction of travel, and
+  the old one unmounts at once. They cover the navbar's views, make-offer's steps and, releasing
+  `PLAN.md` BD-16, the popover's stock entrance and exit.
+- **Two build traps, both silent, are recorded so the next motion work does not fall in:** an
+  arbitrary `duration-[…]` is dropped by Tailwind here, and a value class without the same
+  `motion-safe:` prefix as its `animate-in` is reset to nothing. `PLAN.md` BD-22.
+- **Reduced motion, as built:** every movement rule is inside
+  `@media (prefers-reduced-motion: no-preference)`. The wash, the badge and the swapped panel do
+  not depend on an animation to exist. Proved from the stylesheet and the code, not by eye:
+  `RUNTIME-PASS.md` R6.4 is the eye.
+
 ### D6 — Popovers for F1 and F2 only, at `lg` first. Ratified 2026-09-22. (§6.6 → §3-F)
 
 **F1 (property details) and F2 (player at a glance) are in. F3 (quick actions) is out** and is

@@ -331,6 +331,75 @@ the new value at once.
 *Reversal:* in `use-count-up.ts`, make `display` fall back to `to` rather than `change.from` when
 no frame has landed. The flash comes back.
 
+**BD-19 — the offer badge leaves the text line and sits on the name bar's top-right corner.**
+Taken 2026-09-24 while building Phase 6. The phase says to reserve the badge's space. Inline it
+could not be reserved honestly: at `efd5064` it was a flex sibling of the name
+(`player-card.tsx:107-114`), so its arrival pushed the centred name sideways. Holding a
+permanent inline slot would put every own-card name off centre for good, and squeeze it, because
+**player names have no length cap anywhere** (grepped `maxLength|MaxLength|len(.*Name` over
+`frontend/app`, `frontend/components` and `backend` on 2026-09-24: the only hits are the offer
+note's). Placed `absolute -right-2.5 -top-3` on the bar (which gains `relative`), it sits in the
+20 px padding band the card already has (`p-3` + `p-2`) and takes no layout at all. Measured in the
+walk harness: the name's box is at (167.7, 154) before the badge, while it is present and after
+it goes, and the badge's rectangle stays inside the card's. It gains `shadow-raised ring-2
+ring-white` so the pill separates from the bar's black border it overlaps.
+*Reversal:* delete `absolute -right-2.5 -top-3 … shadow-raised ring-2 ring-white` from the badge
+and `relative` from the bar at `player-card.tsx:133` / `:120`; it goes back into the line, and
+the name moves when it arrives.
+
+**BD-20 — Phase 6's three moments are CSS, including the two `motion` was proposed for.**
+Taken 2026-09-24. DESIGN.md §3-E says `motion` earns its place on moments 1–3 because layout
+animation and enter/exit on lists are unpleasant to hand-roll. Neither case is here. The deed
+count is a small integer: there is no count to drive, only a numeral that replaces another. The
+badge is one element with one entrance. **Nothing in this phase animates a list or a layout.** So
+all of it is `tailwindcss-animate` (already a dependency, `tailwind.config.ts:2,109`) under
+`motion-safe:`. That also means **NB-2 cannot happen here**: Fable's NB-2 is that
+`useReducedMotion` reads the setting once at mount, and a `motion-safe:` media query is live, so
+turning reduced motion on or off takes effect on the next change with no reload. No JS weight is
+added to the room route.
+*Reversal:* none needed to add `motion` later. Replace the class constants (`DEED_ROLL`, the
+badge's classes) with `AnimatePresence`/`motion.span`, and gate them with Phase 5's
+`useReducedMotion` + live `matchMedia` pair.
+
+**BD-21 — "a deed changed hands" is a diff of property ids on the card, not a message type.**
+Taken 2026-09-24. Scope item 1 names `PURCHASE_PROPERTY` and `OFFER_ACCEPTED`. Both reach a card
+only as `page.tsx`'s `refetchPlayers()` (`page.tsx:342`), which replaces every player whole. So
+the card cannot see the message, and the prompt said not to edit `page.tsx` unless forced. It is
+not forced: `hooks/use-deed-change.ts` compares the sorted `properties[].id` of the same player
+across renders. A player who **gains an id** was handed a deed and gets the acknowledgement. Any
+card whose **count changed** gets the roll. The comparison key is a joined string, so a refetch
+that repeats the same deeds (or the same deeds with a house built or a mortgage taken) is not a
+change. **Consequence, stated:** it is broader than the two named messages. An auction lot, a
+kick that moves deeds, or a banker transfer acknowledges the same way. In the player's terms that
+is the same moment, and D5 names the moment, not the messages. The acknowledgement is a greyscale
+wash (`bg-black/10`) on the Properties row, not a money token: a deed is not money (D2). It holds
+and fades on the balance tint's dials (900 / 300 ms, `TINT_HOLD_MS` / `TINT_FADE_MS`), so there is
+one "this card just changed" duration, not a second one.
+*Reversal:* to narrow it to the two messages, thread a "last deed event" from `page.tsx`'s
+handler into `RoomView` and gate `received` on it. That edits `page.tsx`, which is why it was not
+done.
+
+**BD-22 — the two motion dials are named Tailwind tokens, and every animation value class carries
+`motion-safe:`. Both found by reading the built CSS, not by any gate.**
+Taken 2026-09-24. **(a)** The first build used `duration-[240ms]` / `duration-[180ms]`. Tailwind
+emitted **neither**. Core `transitionDuration` and `tailwindcss-animate`'s `duration` utility both
+match an arbitrary `duration-[…]`, and Tailwind drops an ambiguous arbitrary class without a
+warning. Lint, `tsc` and the build were all green while every Phase 6 animation ran at the
+plugin's 150 ms default. Now `transitionDuration: { standard: "180ms", panel: "240ms" }`
+(`tailwind.config.ts:77-78`), from which the plugin derives its animation durations, so
+`duration-standard` / `duration-panel` set both. That also gives each dial its one home.
+**(b)** The popover's stock `data-[state=*]:fade-*|zoom-*|slide-*` value classes were first left
+ungated. `motion-safe:data-[state=open]:animate-in` sorts after them and resets every
+`--tw-enter-*` to `initial` at equal specificity, so the popover ran a 180 ms animation with
+nothing in it. Measured in the harness: `--tw-enter-opacity` and `--tw-enter-scale` read empty.
+After the fix they read `0`, `.95` and `-.5rem`. The rule, for anyone adding motion here: **a
+value class carries the same variant prefix as the `animate-in`/`animate-out` it feeds.** The
+popover's durations are `data-[state=*]`-scoped for the same reason: plain `duration-standard`
+lost to `data-[state=open]:animate-in`'s built-in 150 ms on specificity.
+*Reversal:* (a) is `duration-[…]` back in four places, which silently reverts to 150 ms. (b) is
+removing `motion-safe:` from ten value classes in `ui/popover.tsx:37`, which silently empties the
+animation.
+
 ---
 
 ## 2. Phases
@@ -1073,8 +1142,14 @@ Overall verdict: **SOUND WITH CAVEATS** — rules 2, 3 and R hold under every in
 
 ### Phase 6 — Deed, offer badge and panel transitions
 
-**Status: `HELD`.** **Waits on: board row 29, and Phase 5.** Lane 2. Driver: Opus 5.
-Implements **D5**, items 2, 3 and 4.
+**BUILT 2026-09-24, commit owed.** (Was `HELD` on row 29 and Phase 5. Row 29 landed as `70d5725`.
+Phase 5 was committed as `efd5064` and fast-forwarded onto `main` by Zach on 2026-09-24 in
+chat, and this phase was built on it.) Built in worktree `.claude/worktrees/facelift-phase6`
+(branch `worktree-facelift-phase6`, cut from `main` at `efd5064`). Driver Opus 5 (the session
+ran Opus 5.5, same Default tier), no subagents. Gates green. **Walked in a throwaway local
+harness only, not in a room**: see *As built* below and `RUNTIME-PASS.md` Phase 6. The harness's
+dev server pointed its API at `127.0.0.1:9`, so nothing reached production, and no room was opened.
+Implements **D5**, items 2, 3 and 4; carries **BD-16**, and took **BD-19** through **BD-22**.
 
 **Scope.**
 1. **A deed changing hands.** On `PURCHASE_PROPERTY` and `OFFER_ACCEPTED`, the property count on
@@ -1117,6 +1192,75 @@ cd frontend && bun run build
   this phase grows past its band.
 - **The layout-shift hazard applies hardest to the badge**, which is exactly a conditional
   element inside the fixed card. Reserve its space.
+
+#### Re-verification before building — 2026-09-24 (`AGENT-PRACTICES.md` §2.4)
+
+Run against `efd5064` before any edit. **The rows marked wrong are R5 disproofs of this phase's
+own scope text**, which was written at `c14faa5` on 2026-09-22. The scope text above is left as
+written.
+
+| Claim | State 2026-09-24 at `efd5064` | Citation |
+|---|---|---|
+| Phase 5 is on `main` | `frontend/hooks/use-count-up.ts` present; `efd5064` is `main`'s tip after Zach's `git merge --ff-only worktree-agent-aab9e1e98940eb6f8` | `git ls-tree main -- frontend/hooks/use-count-up.ts`, 2026-09-24 |
+| The reduced-motion gate exists (0.14 said none) | Phase 5 added `motion-safe:`/`motion-reduce:` in `player-card-content.tsx` and `useReducedMotion` + live `matchMedia` in `use-count-up.ts:49,88`. **0.14 is superseded by Phase 5**, as intended | read 2026-09-24 |
+| Scope item 2: the badge is at `player-card.tsx:105-111` | **Wrong line numbers.** It is at `:107-114`, a flex sibling of the name inside the bar `<button>` | read 2026-09-24 |
+| Scope item 3: "the navbar's **three-boolean** body swap (`navbar.tsx:52-54,83-234`)" | **Wrong in substance, not only in line numbers.** Board row 1's sweep (`483ebf5`) replaced the three booleans with one union, `useState<"menu" \| "properties" \| "freeParking" \| "events">` at `navbar.tsx:65-67`. The body is one `<ul>` at `:106-257` switching on it | read 2026-09-24 |
+| Make-offer's step change | `useState` view at `make-offer.tsx:98`, swapped at `:192` (`{view ? … : …}`) | read 2026-09-24 |
+| BD-16's held popover classes | Deferred in a comment at `ui/popover.tsx:29` | read 2026-09-24 |
+| 0.21: event history keyed on index | Still `key={index}`, now at `navbar.tsx:138`. **Not touched by this phase**: the events list does not animate its rows, so index keys cause no replay here. Still open for whoever animates it | read 2026-09-24 |
+| 0.23: the fixed card | `snap-center w-[360px] … aspect-[3/4] … relative` at `player-card.tsx:93` | read 2026-09-24 |
+| How the two named messages reach a card | Both go through the handler's `refetchPlayers()` at `page.tsx:342` (neither is in the skip list at `:334-339`), which replaces each player whole. Enough to derive the change in the card: BD-21 | read 2026-09-24 |
+| `tailwindcss-animate` installed | `tailwind.config.ts:2` import, plugin registered; version 1.0.7 | `node_modules/tailwindcss-animate/package.json` |
+
+#### As built — 2026-09-24
+
+- **Item 1, a deed changing hands.** New `frontend/hooks/use-deed-change.ts` (108 lines) derives
+  it from property ids (BD-21). It is painted by `DeedCount` and `DeedAckWash` in
+  `player-card-content.tsx` (`:88-115`), on both Properties rows (`:323-325`, `:335-337`) from one
+  hook call per card (`:206`). The count's numeral remounts, keyed on the change, and slides in
+  from below when the count rose and from above when it fell. It is `standard` (180 ms), in the
+  tabular face, so nothing reflows. The row a deed landed on carries a `bg-black/10` wash,
+  absolutely placed (`PROPERTIES_ROW` gained `relative`, `:37`). It holds 900 ms, then an
+  opacity-only fade over 300 ms.
+- **Item 2, an offer arriving.** The badge moved out of flow (BD-19) and enters with
+  `fade-in-0 zoom-in-50` over `standard`. It is keyed on an `arrivals` count that rises only when
+  the pending count does (`player-card.tsx:99-105,132`). So it replays for each new offer, and
+  never for a refetch, or for an offer resolved while others remain.
+- **Item 3, panel transitions.** New `frontend/components/ui/panel-transition.ts` (28 lines):
+  `panelEnter(move)` returns the enter classes, forward from the right and back from the left,
+  `panel` (240 ms) ease-out. The navbar's `<ul>` is keyed on `view` (`navbar.tsx:121-122`). Make-offer
+  wraps its step in a keyed `<div>` (`make-offer.tsx:204`). Both track the direction in a
+  `PanelMove` state that is `null` until the first swap. The navbar clears it when its drawer closes
+  (`navbar.tsx:97`), so opening a sheet never replays a slide on top of vaul's own. **Enter only**: the
+  panel being left unmounts at once, which was the cheapest honest reading of "CSS only".
+  **BD-16 is spent:** the popover's stock enter/exit is in, gated (`ui/popover.tsx:29-39`).
+- **Item 4, no fifth moment.** Nothing else moves. Grepped: the only new `animate-in`/`animate-out`
+  and `transition-opacity` rules in the built stylesheet are the five above, and all five sit
+  inside `@media (prefers-reduced-motion: no-preference)` (read from `document.styleSheets` in
+  the harness, 2026-09-24).
+- **Dials.** Two now have named homes: `standard` 180 ms and `panel` 240 ms
+  (`tailwind.config.ts:76-79`, BD-22). The deed wash reuses the tint's 900 / 300 ms. No dial moved.
+- **Scope checks, 2026-09-24:** no `backend/` diff; no `package.json` or `bun.lockb` diff (no
+  new dependency); no `motion` import in any file this phase touched; no diff to `page.tsx` or
+  `use-public-fetch.ts`.
+- **Walked in a throwaway harness, deleted afterwards** (`app/phase6-harness/page.tsx`, fake
+  players and offers that rebuild every object on each "refetch", as the page does). Recorded
+  in `RUNTIME-PASS.md` Phase 6 as not a room walk. **Measured:** a same-data refetch kept both
+  count elements (no remount). A deed moving Bo→Ann rolled both counts (`enter`, 0.18 s,
+  `+.5rem` on the receiver) and washed only Ann's row: opacity 1 until ~926 ms, fading to 0.011
+  at 1182 ms, gone at 1233 ms. The badge arrived with `enter`, 0.18 s, scale .5. The name's box
+  did not move. The badge was kept across a refetch and a resolve, and remounted for the second
+  offer. The navbar did nothing on open, went `enter` 0.24 s `+1rem` forward and `-1rem` back, did
+  nothing on reopen after closing on Bank's Properties, and kept the Danger Zone's bottom at the
+  same pixel during and after the swap. All of that at 1024 px and again at 375 px. Make-offer
+  matched it at 375 px. The popover ran `enter`/`exit` at 0.18 s with opacity 0, scale .95 and
+  -.5rem after BD-22(b).
+- **Not proved by the harness:** the browser pane was **hidden** throughout, so it produced
+  frames slowly. The popover's exit began ~600 ms late there, then ran its 180 ms. That is a
+  pane artifact, not the CSS, but only a visible walk can show it. The browser tools cannot
+  emulate `prefers-reduced-motion`, so reduced motion is proved from the stylesheet and the code
+  paths (every movement rule is inside the `no-preference` block, and the wash, badge and swapped
+  panel exist without any animation), **not by eye**. Both are R6.x entries for Zach.
 
 ---
 

@@ -88,6 +88,22 @@ const PlayerCard = ({
     (o) => o.toPlayerId === currentPlayer?.id && o.status === "PENDING"
   ).length;
 
+  // An offer arriving (DESIGN.md D5, moment 3; PLAN.md Phase 6 item 2). The
+  // badge is the one persistent signal of it -- the toast is gone in four
+  // seconds -- so it arrives rather than appearing between frames.
+  //
+  // `arrivals` rises only when the count does, and keys the badge, so it
+  // replays its entrance for each new offer and for nothing else: a refetch
+  // that repeats the count, or an offer resolved, keeps the element as it is.
+  // Recorded during render, as `hooks/use-count-up.ts` does.
+  const [badge, setBadge] = useState({ count: waitingOnMe, arrivals: 0 });
+  if (badge.count !== waitingOnMe) {
+    setBadge({
+      count: waitingOnMe,
+      arrivals: waitingOnMe > badge.count ? badge.arrivals + 1 : badge.arrivals,
+    });
+  }
+
   return (
     <>
       <div className="snap-center w-[360px] border bg-white border-black  aspect-[3/4] select-none relative">
@@ -101,12 +117,20 @@ const PlayerCard = ({
                   // A removed player cannot be traded with -- the Go side
                   // refuses it -- so their bar does not open the form.
                   disabled={isRemoved && !isSelf}
-                  className={`h-16 border-[1px] text-black ${josephinBold.className} text-center w-full border-black flex items-center justify-center gap-x-3 text-3xl transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-default disabled:hover:brightness-100`}
+                  className={`relative h-16 border-[1px] text-black ${josephinBold.className} text-center w-full border-black flex items-center justify-center gap-x-3 text-3xl transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-default disabled:hover:brightness-100`}
                 >
                   <span>{player?.name}</span>
+                  {/* Out of flow, on the bar's top-right corner, so its arrival
+                      moves nothing: inline, it pushed the name sideways the
+                      moment it appeared, and names have no length cap, so
+                      holding room for it inline would squeeze every name on
+                      your own card for good (PLAN.md BD-19). It sits in the
+                      padding band the card already has. Opacity and scale only;
+                      reduced motion keeps the badge and drops the entrance. */}
                   {isSelf && waitingOnMe > 0 && (
                     <span
-                      className={`rounded-full bg-black px-3 py-1 text-base text-white`}
+                      key={badge.arrivals}
+                      className={`absolute -right-2.5 -top-3 rounded-full bg-black px-3 py-1 text-base text-white shadow-raised ring-2 ring-white motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-50 motion-safe:duration-standard motion-safe:ease-out`}
                     >
                       <span className={numeralFace}>{waitingOnMe}</span>{" "}
                       {waitingOnMe === 1 ? "offer" : "offers"}

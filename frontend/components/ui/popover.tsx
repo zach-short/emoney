@@ -26,14 +26,15 @@ const PopoverContent = React.forwardRef<
       // something floating over the room -- and the `overlay` step of the
       // elevation scale, which is what separates it from a drawer's `modal`.
       //
-      // No entry animation, deliberately: the stock shadcn popover ships four
-      // `data-[state=*]:animate-*` classes, and unguarded motion here would
-      // land before Phase 5 establishes the reduced-motion gate this work
-      // ratified (PLAN.md section 3; nothing in the tree handles
-      // `prefers-reduced-motion` as of 2026-09-23). Panel transitions are
-      // Phase 6's (PLAN.md BD-16).
+      // The stock shadcn entrance and exit, added in Phase 6 behind the
+      // reduced-motion gate (PLAN.md BD-16, which held them back until the gate
+      // existed). Only `animate-in` / `animate-out` start an animation, and
+      // both are `motion-safe:`, so under reduced motion the popover appears
+      // and goes at once; the rest only set the values those two read. 180 ms
+      // is the "Standard transition" dial (PLAN.md section 3).
       className={cn(
         "z-50 w-72 rounded-md border bg-popover/55 p-4 text-popover-foreground shadow-overlay outline-none backdrop-blur-[12px]",
+        "motion-safe:data-[state=open]:animate-in motion-safe:data-[state=closed]:animate-out motion-safe:data-[state=closed]:fade-out-0 motion-safe:data-[state=open]:fade-in-0 motion-safe:data-[state=closed]:zoom-out-95 motion-safe:data-[state=open]:zoom-in-95 motion-safe:data-[side=bottom]:slide-in-from-top-2 motion-safe:data-[side=left]:slide-in-from-right-2 motion-safe:data-[side=right]:slide-in-from-left-2 motion-safe:data-[side=top]:slide-in-from-bottom-2 motion-safe:data-[state=open]:duration-standard motion-safe:data-[state=closed]:duration-standard motion-safe:ease-out",
         className,
       )}
       collisionPadding={12}

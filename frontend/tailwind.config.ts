@@ -66,6 +66,17 @@ export default {
         overlay: "var(--elevation-overlay)",
         modal: "var(--elevation-modal)",
       },
+      // Two of PLAN.md section 3's motion dials, as named tokens (Phase 6).
+      // `tailwindcss-animate` derives its animation durations from this scale,
+      // so `duration-standard` / `duration-panel` set both the transition and
+      // the animation duration. Named, not `duration-[240ms]`: an arbitrary
+      // duration matches both the core utility and the plugin's, and Tailwind
+      // drops an ambiguous arbitrary class without a word -- which is what the
+      // first build of Phase 6 did.
+      transitionDuration: {
+        standard: "180ms",
+        panel: "240ms",
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

@@ -14,6 +14,7 @@ import PayRequestRent from "./pay.req.rent.component";
 import { numeralFace } from "../ui/fonts";
 import { formatMoney } from "@/lib/utils/money";
 import { TINT_FADE_MS, useCountUp } from "@/hooks/use-count-up";
+import { useDeedChange } from "@/hooks/use-deed-change";
 import PlayerTags from "./player-tags";
 import ManageProperties from "./manage-properties";
 import { BankerTransactionPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
@@ -32,8 +33,9 @@ import {
 // one constant and cannot drift apart. The display utility is deliberately NOT
 // in here: each call site adds its own, so which one wins at which width is
 // readable at the call site instead of resting on Tailwind's emission order.
+// `relative` holds Phase 6's deed wash, which is absolutely placed inside it.
 const PROPERTIES_ROW =
-  "items-center justify-between w-full rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
+  "relative items-center justify-between w-full rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
 
 // The card's balance, counting to the server's value (DESIGN.md D5). All the
 // logic is in `hooks/use-count-up.ts`; this only paints what it returns.
@@ -72,6 +74,45 @@ const BalanceFigure = ({ display, tint }: ReturnType<typeof useCountUp>) => {
     </span>
   );
 };
+
+// A deed changing hands (Phase 6 item 1), painted on the Properties row. The
+// logic is in `hooks/use-deed-change.ts`; this only paints what it returns.
+//
+// The count rolls: keyed on the change, so the numeral remounts and slides in
+// from the side it moved -- up from below, down from above. The row a deed
+// landed on carries a wash, greyscale because a deed is not money (D2 keeps
+// saturated colour for money direction). Both are transform and opacity only,
+// the wash is absolutely placed, and the numeral is in the tabular face, so
+// nothing in the fixed card moves. Reduced motion drops the roll and the fade,
+// and keeps the wash for its full hold.
+const DEED_ROLL = {
+  up: "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 motion-safe:duration-standard motion-safe:ease-out",
+  down: "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-2 motion-safe:duration-standard motion-safe:ease-out",
+} as const;
+
+const DeedAckWash = ({ ack }: { ack: ReturnType<typeof useDeedChange>["ack"] }) =>
+  ack && (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute inset-0 rounded-md bg-black/10 motion-safe:transition-opacity motion-reduce:transition-none ${ack === "fade" ? "opacity-0" : "opacity-100"}`}
+      style={{ transitionDuration: `${TINT_FADE_MS}ms` }}
+    />
+  );
+
+const DeedCount = ({
+  count,
+  change,
+}: {
+  count: number;
+  change: ReturnType<typeof useDeedChange>;
+}) => (
+  <span
+    key={change.n}
+    className={`${numeralFace} inline-block ${change.roll ? DEED_ROLL[change.roll] : ""}`}
+  >
+    {count}
+  </span>
+);
 
 const PlayerDetails = ({
   player,
@@ -161,6 +202,9 @@ const PlayerDetails = ({
   // player's id so a slot reused for someone else snaps instead of counting
   // from one player's money to another's.
   const balance = useCountUp(player?.balance, player?.id);
+  // One per card, painted on both Properties rows below, keyed the same way.
+  const deeds = useDeedChange(player?.properties, player?.id);
+  const deedCount = player?.properties?.length || 0;
 
   const [dialogState, setDialogState] = useState<"add" | "remove" | null>(null);
   const [amount, setAmount] = useState("");
@@ -276,10 +320,9 @@ const PlayerDetails = ({
         {!isOwnCard && (
           <DeedListPopover properties={player?.properties}>
             <button type="button" className={`${PROPERTIES_ROW} hidden lg:flex`}>
+              <DeedAckWash ack={deeds.ack} />
               <span>Properties</span>
-              <span className={numeralFace}>
-                {player?.properties?.length || 0}
-              </span>
+              <DeedCount count={deedCount} change={deeds} />
             </button>
           </DeedListPopover>
         )}
@@ -289,10 +332,9 @@ const PlayerDetails = ({
               type="button"
               className={`${PROPERTIES_ROW} flex ${!isOwnCard ? "lg:hidden" : ""}`}
             >
+              <DeedAckWash ack={deeds.ack} />
               <span>{isOwnCard && "My"} Properties</span>
-              <span className={numeralFace}>
-                {player?.properties?.length || 0}
-              </span>
+              <DeedCount count={deedCount} change={deeds} />
             </button>
           </DrawerTrigger>
           <DrawerContent

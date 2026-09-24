@@ -435,3 +435,59 @@ adversarial review of `hooks/use-count-up.ts`. **Done 2026-09-24: SOUND WITH CAV
 blocking defect**, pasted verbatim into `PLAN.md` Phase 5 under *Fable 5.1 review*. Its NB-2 bears
 on R5.3: the reduced-motion gate is one-way for a mount (turning reduce **off** mid-session leaves
 the card snapping until a reload) — so walk R5.3 with a reload, as written.
+
+## Phase 6 — Deed, offer badge and panel transitions. Entries written 2026-09-24.
+
+**Nothing below was walked in a room.** The in-app browser held no stored player for any room
+(`Object.keys(localStorage)` returned no `room_*` key, 2026-09-24). Opening a room would have
+meant joining one, which is a write against production, and the build session had no consent in
+chat for that. What was walked is a throwaway local page, since deleted. It rendered the real
+`Navbar` and `PlayerCard` against fake players and offers, rebuilt every object on each
+"refetch" as the page does, and ran on a dev server whose API pointed at `127.0.0.1:9`. It was
+walked at 1024 px and at 375 px. The measurements are in `PLAN.md` Phase 6, *As built*. The
+browser pane was hidden throughout, so frames were slow and nothing was judged by eye. Reduced
+motion could not be emulated by the browser tools; it is proved from the stylesheet only. **The
+entries below are owed.**
+
+**Fixture.** As Phase 5: a two-profile room, one profile the banker (`UIP1CHK` if it still
+exists). Run the frontend through `scripts/emoney dev`. For R6.4, turn Reduce motion on first:
+macOS System Settings → Accessibility → Display → Reduce motion, or DevTools → Rendering →
+"Emulate CSS media feature prefers-reduced-motion: reduce". **No reload is needed for this
+phase**: its gate is a live CSS media query, unlike Phase 5's hook (NB-2).
+
+### R6.1 — A deed changing hands is visible without reading the toast. **NOT WALKED.**
+- **Where.** Two profiles, A and B, at 375×812 and at ≥`lg`. Profile A opens the menu → Bank's
+  Properties and buys a deed. Then B offers A a deed and A accepts (the offer drawer from B's
+  name bar on A's screen).
+- **Right answer.** On the purchase, A's Properties count on **both** screens goes up by one and
+  its numeral slides up into place. A's Properties row carries a light grey wash for about a
+  second, then fades. On the accepted trade, the count on each card that changed slides in the
+  direction it moved. **Only the card that received a deed** carries the wash; on a one-for-one
+  swap both cards do, and neither count moves. Nothing else on the card moves by a pixel. A
+  refetch that changes nothing, such as someone else's balance moving, must not replay either.
+
+### R6.2 — An arriving offer is still visible after four seconds. **NOT WALKED.**
+- **Where.** Same room, 375×812 and ≥`lg`. B sends A an offer. Watch A's own card.
+- **Right answer.** A black `1 offer` pill pops in on the **top-right corner** of A's name bar,
+  overlapping its edge. A's name does not shift. The pill is still there after the toast has
+  gone, and stays until A resolves the offer. A second offer from B pops it in again, reading
+  `2 offers`. Declining one leaves `1 offer` without a pop. A long name must not collide with the
+  pill. Check with the longest name in the room.
+
+### R6.3 — The navbar and make-offer swaps read as navigation. **NOT WALKED.**
+- **Where.** Any room, both widths. Menu → Bank's Properties → Return to Main Menu. Then close
+  the sheet while on Bank's Properties and reopen it. Then open another player's name bar
+  (Make an Offer) → Cash → Back. At ≥`lg`, open a deed popover and the balance glance popover.
+- **Right answer.** Going deeper slides the new panel in from the right. Going back slides it in
+  from the left, over about a quarter of a second. Reopening a sheet plays **no** slide on top of
+  the drawer's own rise. The Danger Zone buttons do not jump. A popover grows in slightly and fades
+  (about 0.2 s), and shrinks and fades out when it closes. Harness caveat to check here: the
+  popover's exit started late in a hidden pane. In a visible window it must start at once.
+
+### R6.4 — Reduced motion keeps every one of these as state. **NOT WALKED at the OS level.**
+- **Where.** Reduce motion ON (fixture above). Repeat R6.1–R6.3.
+- **Right answer.** **No** slide, pop, roll or fade anywhere. But the new count appears at once,
+  the receiving row still shows the grey wash for about a second and then **vanishes without
+  fading**, the offer pill is there as soon as the offer is, and each swapped panel is simply
+  shown. A deed that lands with no wash, or an offer with no pill, is a **failure** ("animations
+  off"). So is anything that still slides.

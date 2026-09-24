@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/utils/money";
 import { Offer, OfferNoID, Player } from "@/types/schema";
 import Amount from "./amount";
 import Properties from "./properties";
+import { PanelMove, panelEnter } from "@/components/ui/panel-transition";
 // import Immunity from "./immunity";
 
 // The cap on the note, in UTF-16 units here and in runes on the Go side
@@ -104,6 +105,14 @@ const MakeOffer = ({
     // | "request_immunity"
     | null
   >(null);
+  // Which way the last step went, so the new one slides in from that side
+  // (PLAN.md Phase 6 item 3). `null` until the first step, so the form does
+  // not slide in on top of the drawer opening.
+  const [move, setMove] = useState<PanelMove>(null);
+  const go = (next: typeof view) => {
+    setMove(next === null ? "back" : "forward");
+    setView(next);
+  };
 
   const updateOffer = <K extends keyof OfferNoID>(
     key: K,
@@ -189,12 +198,16 @@ const MakeOffer = ({
   return (
     <>
       <section className={`w-full px-2 pb-8`}>
+        {/* Keyed on the step, so each change mounts a fresh panel and its
+            entrance plays. Every absolutely placed child below has its own
+            `relative` parent, so the entrance's transform moves none of them. */}
+        <div key={view ?? "form"} className={panelEnter(move)}>
         {view ? (
           <>
             <button
               type="button"
               className={`border py-4 rounded w-full mt-5 text-2xl font-semibold`}
-              onClick={() => setView(null)}
+              onClick={() => go(null)}
             >
               Back
             </button>
@@ -224,7 +237,7 @@ const MakeOffer = ({
                   className={` border
                   ${!offer?.offer?.amount ? "border-white" : `border-money-out`}
                      w-48 p-3 rounded-md`}
-                  onClick={() => setView("offer_amount")}
+                  onClick={() => go("offer_amount")}
                 >
                   {!offer?.offer?.amount ? (
                     "Cash"
@@ -237,7 +250,7 @@ const MakeOffer = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setView("offer_properties")}
+                  onClick={() => go("offer_properties")}
                   className={` border border-white p-3 rounded-md
                   ${
                     (offer?.offer?.properties?.length ?? 0) === 0
@@ -270,7 +283,7 @@ const MakeOffer = ({
               <div className={`flex flex-col gap-y-3`}>
                 <button
                   type="button"
-                  onClick={() => setView("request_amount")}
+                  onClick={() => go("request_amount")}
                   className={`
 
                   ${
@@ -298,7 +311,7 @@ const MakeOffer = ({
                       : `border-money-in`
                   }
                     border p-3 rounded-md`}
-                  onClick={() => setView("request_properties")}
+                  onClick={() => go("request_properties")}
                 >
                   {(offer.request.properties?.length ?? 0) > 0 && (
                     <span className={numeralFace}>
@@ -362,6 +375,7 @@ const MakeOffer = ({
             </div>
           </>
         )}
+        </div>
       </section>
     </>
   );
