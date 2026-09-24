@@ -335,6 +335,38 @@ instantaneous is worth something in a money app. The three rules above are what 
 count-up honest; the codebase has no gate that can enforce them, which is why they appear again
 as a named `watch for` in `PLAN.md` rather than as scope prose.
 
+**As built, 2026-09-24 — Phase 5 (`PLAN.md`).** The decision and all three rules stand, with no
+deviation and the dials unmoved: 450 ms, 600 ms cap, 900 ms hold, 300 ms fade. Each is one
+exported constant in `frontend/hooks/use-count-up.ts:24-27`. Four things about it are worth the
+next reader's time.
+
+**Where each rule is enforced.** Rule 1: the duration is `Math.min(COUNT_UP_MS, COUNT_UP_CAP_MS)`
+(`:115`). A timer also ends the count at the cap even if frames stall (`:124`); a hidden tab
+pauses `requestAnimationFrame` but not that timer. Rule 2: a count's `from` is the previous
+*server* value, never a frame (`:73-75`). The ease is `easeOut`, which does not overshoot, so
+every frame lies between two server values (`:118`). Rule 3: a value arriving while a count is
+running starts no new count (`:80-88`). Render then shows a frame only if it belongs to the
+current change, for the current player, counting to the current value (`:145-161`). **That render
+guard is the by-construction half**: a stale frame cannot paint, whatever order effects and
+callbacks run in. Also enforced: first mount and a different player in the same slot snap, with
+no tint. A refetch that repeats the balance changes nothing, because the hook's inputs are
+primitives, not the `player` object.
+
+**Reduced motion, as built.** `useReducedMotion()` in `motion@13.4.3` is
+`useState(prefersReducedMotion.current)`: read once at mount, never updated, and `null` on the
+server (`node_modules/framer-motion/dist/es/utils/reduced-motion/use-reduced-motion.mjs`). So a
+count needs an explicit `false` from it **and** a live
+`matchMedia("(prefers-reduced-motion: reduce)")` miss at the moment of the change (`:86-88`). The
+tint runs on timers, independent of whether a count runs, so it survives reduced motion as a
+static state. Its CSS fade is `motion-safe:` only, with `motion-reduce:transition-none`.
+
+**The tint's form** is a wash behind the figure plus an `↑`/`↓` glyph, not coloured text and not
+`+`/`−`. The reason is the white paper card and BD-11's negative-balance reading; see `PLAN.md`
+BD-17. **Before a count's first frame the figure shows the previous server value**, which removes
+a one-frame flash of the end value; see `PLAN.md` BD-18 for its stated cost.
+
+**`player-glance.tsx`'s balance row does not count**; the reason is in `PLAN.md` Phase 5's as-built.
+
 ### D6 — Popovers for F1 and F2 only, at `lg` first. Ratified 2026-09-22. (§6.6 → §3-F)
 
 **F1 (property details) and F2 (player at a glance) are in. F3 (quick actions) is out** and is

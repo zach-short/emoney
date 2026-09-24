@@ -304,6 +304,33 @@ which is also what the rest of the app does today.
 *Reversal:* add the four `data-[state=*]:animate-*` classes to `PopoverContent` — but do it in
 Phase 6, behind the gate, not before it.
 
+**BD-17 — the balance tint is a wash behind the number, with an arrow as its sign glyph.**
+Taken 2026-09-24 while building. D5 says "a brief directional tint on the card"; D2 says every
+money colour carries a redundant sign glyph. Two facts decided the form. First, the money tokens
+are tuned for a black ground (`globals.css:56-65`) and the card is white paper
+(`player-card.tsx:93`), so green *text* on it would not read. The tint is therefore
+`bg-money-in/25` / `bg-money-out/25` behind black text. Second, BD-11 already found that a `−`
+beside a balance reads as a negative balance. So the glyph is `↑` / `↓`, absolutely placed to the
+left of the figure, in the `space-x-5` gap beside the banker's `⊖`. Nothing takes layout space:
+the wash uses zero-net padding (`-mx-1 px-1`). The wash appears at once; only its fade-out is a
+`motion-safe:` transition, which `motion-reduce:transition-none` removes. The tint is on the
+balance, not the whole card.
+*Reversal:* in `player-card-content.tsx`, change `TINT_WASH` to `text-money-*` classes, or
+`TINT_GLYPH` to `+`/`−`. Both are one constant each.
+
+**BD-18 — before a count's first frame lands, the figure shows the previous server value.**
+Taken 2026-09-24 after the local harness caught a flash. The render that records a change ran
+one frame before `animate`'s first `onUpdate`, so the screen went `$1,750 → $1,503 → … →
+$1,750`. Showing `from` until the first frame is still an authoritative value (rule 2). It is
+safe only because a counting change always starts and always ends, by completion or by the 600 ms
+cap timer. So the effect has no early-return path, and the live reduced-motion check moved into
+the render-time decision. **The cost, stated:** if frames stall entirely (a hidden tab), the
+previous value holds for up to 600 ms before the cap snaps it. The harness walked that case, by
+accident, in a hidden pane: `$1,500` held, then `$1,750` at 607 ms. Before this change it showed
+the new value at once.
+*Reversal:* in `use-count-up.ts`, make `display` fall back to `to` rather than `change.from` when
+no frame has landed. The flash comes back.
+
 ---
 
 ## 2. Phases
@@ -848,7 +875,11 @@ cd frontend && bun run build
 
 ### Phase 5 — Cash count-up
 
-**Status: `HELD`.** **Waits on: board row 29 landing on `app/room/[code]/page.tsx`.**
+**BUILT 2026-09-24, commit owed.** (Was `HELD` on board row 29; row 29 landed as `70d5725`, which
+this phase was built on.) Gates green, not walked in a room: the hook was walked in a throwaway
+local harness only (see *As built* below and `RUNTIME-PASS.md` Phase 5). **The Fable 5.1 review
+returned SOUND WITH CAVEATS, no blocking defect** — pasted verbatim under *Fable 5.1 review* at
+the end of this block. An independent Opus audit re-ran the gates and returned non-blocking only.
 Lane 2. Driver: Opus 5, with a Fable 5.1 review subagent. Implements **D5**, items 1 and its
 mitigation.
 
@@ -927,6 +958,116 @@ the Deep review exists:
   state (`player-card-content.tsx:193-239`) inside a fixed `w-[360px] aspect-[3/4]` card.
   Animating entry without reserving space pushes the rest of the card while someone is reading a
   balance or tapping Accept. Animate opacity and transform only.
+
+#### Re-verification before building — 2026-09-24 (`AGENT-PRACTICES.md` §2.4)
+
+| Claim | State 2026-09-24 | Citation |
+|---|---|---|
+| Row 29 has landed | `70d5725` is `main`'s tip. **The build worktree had been cut at `91a8f29`, one commit behind**; it was fast-forwarded (`git merge --ff-only main`, no commit made) before any edit | `git merge-base --is-ancestor 70d5725 HEAD` failed, then succeeded after the fast-forward |
+| The two balance sites | `{formatMoney(player?.balance)}` at `player-card-content.tsx:200` (`<p>`, `lg:hidden`) and `:211` (F2's `<button>`) — exact | read 2026-09-24 |
+| Card keying | Other players keyed `key={oPlayer?.id}` at `room.client.tsx:184`; the current player's card is a single unkeyed element at `:156` | read 2026-09-24 |
+| No `motion` installed | absent from `frontend/package.json` before this phase | grepped 2026-09-24 |
+| The hazard the watch-for names | **Superseded by row 29.** `page.tsx:189-243`'s unguarded refetch is gone: `hooks/use-public-fetch.ts` now coalesces (one in flight, one trailing) and drops out-of-order responses by a rising request number (`:120,157`), and keeps the last-good room on failure. The hook below does not rely on any of it | `use-public-fetch.ts` read 2026-09-24 |
+| Money tokens | `--money-in` / `--money-out` exist (`globals.css:64-65`), **tuned for a black ground** — the card is white paper. Drives `BD-17` | read 2026-09-24 |
+
+#### As built — 2026-09-24
+
+- **`motion@13.4.3`**, imported as `animate` and `useReducedMotion` from `motion/react`, in one
+  file only: `frontend/hooks/use-count-up.ts` (176 lines). **Bundle:** the room route's client
+  chunks (the 6 named in `.next/server/app/room/[code]/page_client-reference-manifest.js`)
+  **113,895 B → 134,070 B gzipped, +20,175 B (+17.7%)**; all client JS in `.next/static/**/*.js`
+  (23 chunks either side) **324,165 B → 344,343 B, +20,178 B (+6.2%)**. So the whole delta lands
+  on the room route. Method: `bun run build` in this worktree before `bun add motion` and after
+  the wiring, then `gzip -9` on each chunk, summed. It is HANDOFF 47's method plus the per-route
+  list, which HANDOFF 47 did without. This is the second additive weight on the room page
+  after Phase 4's +23,586 B.
+- **One hook call per card** (`player-card-content.tsx:163`), painted at both balance sites
+  (`:243`, `:254`) by one module-scope `BalanceFigure` (`:51`). Every frame goes through
+  `formatMoney`.
+- **`player-glance.tsx` does not follow.** Its `Balance` row (`player-glance.tsx:80`) is a
+  reference readout inside a popover that opens on demand. It is not the card's headline, and
+  the figure you click to open it *is* the counted one. A count there would be a second animated
+  site for a number that is already animated one pixel-row away. It renders the plain
+  authoritative value, which is always correct.
+- `BD-17` and `BD-18` above record the build calls this phase took.
+
+#### Fable 5.1 review — verdict, pasted verbatim (2026-09-24)
+
+Run by the lead session as a separate Fable 5.1 subagent in its own worktree
+(`agent-a3a2bd2bd7ec1ab33`, returned clean), reading the builder's tree read-only; artifact
+`frontend/hooks/use-count-up.ts` sha256 `89f94ee6…e635`, consumer `player-card-content.tsx`
+sha256 `e3cdba10…0ad7`. Headings demoted one level to fit this file; text otherwise unchanged.
+
+Paths below are relative to `/Users/zachshort/Projects/emoney/.claude/worktrees/agent-aab9e1e98940eb6f8/`; `H:` = `frontend/hooks/use-count-up.ts`.
+
+##### Facts about the library that the verdict depends on
+
+- `animate(from, to, opts)` from `motion/react` is framer-motion's scoped `animate`. It **strips the top-level `onComplete`** and attaches it as `animation.finished.then(onComplete)` (`framer-motion/dist/es/animation/animate/index.mjs:34-49`), so the hook's `end` from completion runs in a **microtask after** the final `onUpdate`, never before it.
+- For a numeric subject with no element the `KeyframeResolver` is synchronous (`isAsync = false` default, `KeyframesResolver.mjs:87,117-131`), so the `JSAnimation` is created inside the `animate()` call; its **first `onUpdate` is on the next rAF** (`play()` → `driver.start()` → `frame.update`, `JSAnimation.mjs:297-326`, `drivers/frame.mjs:7`). rAF is the only driver; a hidden tab stalls it entirely.
+- The final frame's value is exactly `to`: `getFinalKeyframe` returns the last keyframe unmodified (`JSAnimation.mjs:226-228`, `keyframes/get-final.mjs`). `easeOut` is monotone, so every intermediate value lies in `[from, to]`.
+- **`JSAnimation.stop()` synchronously calls `tick(time.now())`, which calls `onUpdate`** (`JSAnimation.mjs:45-52`). This is the one library behaviour that could leak a frame into the hook; see rule 3.
+- `useReducedMotion` reads `prefersReducedMotion.current` **once into `useState` and never subscribes** (`framer-motion/.../use-reduced-motion.mjs:32-36`); it is `null` only on the server (`reduced-motion/state.mjs:2`, `index.mjs:5-7`).
+- Nothing in the app sets `MotionGlobalConfig`/`MotionConfig`/`skipAnimations` (grepped `frontend/app components hooks lib`: no hits), so the `shouldSkip` short-circuit in `interfaces/motion-value.mjs:61-81` is never taken.
+
+##### Rule 1 — 450 ms default, hard cap 600 ms: HOLDS WITH CAVEATS
+
+- **Normal frames.** `duration: Math.min(450,600)/1000` (`H:115`); completion tick at ~450 ms emits `onUpdate(to)` then `finish()` → microtask → `end` → `setFinished(n)` (`H:108-112,120`). Display is `to` from the last frame onward (`H:159-161`). Prevented.
+- **rAF starved entirely (hidden tab).** No tick ever runs; `display` = `change.from` (`H:161`). Cap `setTimeout(end, 600)` (`H:124`) fires → `live=false`, `controls.stop()`, `setFinished(n)` → `counting` false (`H:154`) → `display = to`. Prevented, with the caveat below.
+- **rAF firing late after the cap.** `end` sets `live=false` before `stop()` (`H:101-104,110`); `stop()` tears down the driver (`JSAnimation.mjs:352-362`); any straggling `onUpdate` is blocked by `live &&` (`H:119`); and even a leaked `setFrame` is ignored because `finished === change.n` makes `counting` false (`H:154`). Double-guarded. Prevented.
+- **Cap and completion racing.** Completion first: `end` halts, does *not* clear `cap`; the cap fires later into `if (!live) return` (`H:109`). Cap first (slow frames at ~590 ms): `end` → `live=false` → `stop()` → its internal `tick` may `finish()` → the group promise resolves → second `end` in a microtask → `!live` → no-op. Either order ends exactly once. Prevented.
+- **Two changes within 600 ms.** See rule 3: the second change makes `counts:false` (`H:84-88`), the effect cleanup clears the cap and halts (`H:125-128`), the new effect returns at `H:95`, and `display = to` at once. Prevented.
+- **Caveat A (the BD-18 question).** The render guard shows `change.from` until the first frame (`H:161`). With frames running that is 1-2 frames. With rAF stalled it is up to the cap, and **the cap is a `setTimeout`, which background tabs throttle to ~1 s alignment (Chrome/Firefox/Safari)**, so `from` can hold ~1 s, not 600 ms. It is invisible while hidden, and on `visibilitychange` the pending timer runs promptly, so a user cannot observe it; but *as literally written* rule 1 is not met in that window. `from` is the previous server value (rule 2's own definition of authoritative), and it is static, so it does not "read as live". BD-18 states this cost honestly except for the throttling detail.
+- **Caveat B.** `useReducedMotion` dev-mode `warnOnce` fires when reduced motion is on. Cosmetic.
+
+##### Rule 2 — always targets the authoritative server value; settles on exactly the latest: HOLDS
+
+- `from` is `change.to` of the previous change (a server value) or `null` (`H:75`); `to` is the prop (`H:46,76`); `animate(change.from, change.to)` (`H:113`). No delta is ever added; no intermediate target is computed. Prevented by construction.
+- **Coalesced refetch (use-public-fetch: one in flight + one trailing, out-of-order dropped).** Two server writes that collapse into one response produce one change A→C; the skipped B is never a target. Correct under rule 2.
+- **Same value re-delivered as a new object many times / last-good room on failure.** Inputs are the primitives `player?.balance`, `player?.id` (`player-card-content.tsx:163`); `change.to !== to` is false, no branch, effects keyed on `[change]` do not re-run (`H:68,129,143`). Prevented.
+- **Settling.** Whenever not counting, `display = to` (`H:157-158`). While counting, display ∈ {`from`, `round(frame.v)`} and the count ends by completion or cap. The only way to stay "counting" would be an effect that never sets `finished`; the effect has no early return after `counts` (`H:93-95`) and the cap timer is armed synchronously (`H:124`). Prevented.
+- **Rounding.** Final frame `v === to` exactly; `Math.round` of a monotone path within `[from,to]` never leaves the integer interval. Balances are whole dollars (Go refuses fractions, `money.ts:15-19`). Prevented. See NB-4 for the fractional non-case.
+- **Negative / zero.** `isMove` uses `!== null` and `!==` (`H:40`); `0` is a valid `from`. `Math.round(-0.5) → -0` renders through `formatMoney`'s trunc/abs as `$0`. Prevented.
+- **First mount with nonzero balance.** Initial state `from: null, counts: false` (`H:51-57`) → `display = to`, `isMove` false → no tint. No count from 0. Prevented.
+- **`undefined`/`null` then a number.** `to = value ?? null` (`H:46`). Identity `undefined`→id: `samePlayer` false → `from: null` → snap, no tint. Same id, balance `null`→number: `from = change.to = null` → `isMove` false → snap, no tint. Prevented.
+- **Player identity change in the same slot, mid-count or at rest.** Other cards are keyed by `oPlayer?.id` (`room.client.tsx:184`); the current card is a fixed slot whose player is `find(p.id === storedPlayerId)` (`page.tsx:114-115`). Either way `change.identity !== identity` → `from: null` → `counts:false`, no tint (`H:68-75,84-85,166`); the old effect's cleanup halts the old animation. `counting` and `tint` both re-check `change.identity === identity` at render (`H:155,166`). Prevented.
+
+##### Rule 3 — a value arriving mid-animation snaps: HOLDS
+
+- **Mid-count arrival.** `midFlight = change.counts && finished !== change.n` (`H:70`); `next.counts = isMove && !midFlight && …` (`H:84-88`) → `counts:false` → `display = to` on the immediate re-render (`H:157-158`). `from` is recorded as the *server* B, not the interpolated frame (`H:75`). Prevented.
+- **A→B→A, including return to `from`.** n=1 counts A→B; A arrives: `change.to (B) !== A` → midFlight → snap to A, `from: B`; `isMove` true so tint restarts with direction `A > B ? in : out` (`H:168-170`) — matches the latest change. Prevented.
+- **Change equal to the current value mid-count.** `change.to === to` → no branch; the count continues to the value the server still holds. Correct.
+- **Third change after a snap.** n=3 was a snap (`counts:false`), so for n=4 `midFlight` is false → n=4 counts from n=3's `to`. Correct: a snap is a settled state.
+- **The one library hazard: `stop()` emits a synchronous `onUpdate`** (`JSAnimation.mjs:46-48`). In every path (`end`, cleanup, StrictMode) `halt()` sets `live = false` *before* `controls.stop()` (`H:101-104`), so that frame is dropped; and a stale frame's `n` would not match the new `change.n` anyway (`H:159`). Double-guarded. Prevented — but the ordering inside `halt` is load-bearing and uncommented.
+- **Stale `finished` in the same batch.** If `setFinished(1)` and the refetch's data land in one batch, `midFlight` is either true (snap) or false (count from B); both are correct outcomes for a count that had reached `to`. Prevented.
+- **Unmount mid-count.** Cleanup clears the cap and halts (`H:125-128`); tint timers cleared (`H:139-142`); no `setState` after unmount is reachable. Prevented.
+- **StrictMode double-invoke.** Cleanup halts without `setFinished` (`H:105-107`), the second run creates a fresh `motionValue` (`single-value.mjs:6`) and a fresh `live`; the first animation's promise, if it ever resolves, hits the old closure's `!live`. Prevented.
+
+##### Rule R — reduced motion: no count, tint still shows: HOLDS WITH CAVEATS
+
+- `counts` requires `reduceMotion === false` **and** a live `matchMedia` miss (`H:87-88`); under `reduce` the change snaps. The tint is driven by `isMove(change)` and the two timers (`H:131-143,164-173`), never by `counts`, so hold (900 ms) and fade (300 ms) run unchanged. Consumer: wash for hold, glyph until done, and the fade is `motion-safe:` only (`player-card-content.tsx:52-70`, BD-17). Prevented.
+- **`useReducedMotion` null on server / first render.** `null` only when `typeof window === "undefined"` (`reduced-motion/index.mjs:5-7`); on the client the lazy init runs before `useState` reads it (`use-reduced-motion.mjs:32-34`), so it is a boolean by the first client render. The branch at `H:68` only fires on a prop *change*, which cannot happen on the server, so `window.matchMedia` at `H:88` is safe. No hydration mismatch (nothing in the markup depends on it). Prevented.
+- **Flipping during a count.** Reduce turned **on** mid-count: the in-flight count finishes (≤600 ms), every later change snaps via the live check. Reduce turned **off**: `reduceMotion` is frozen `true` for the mount (no subscription), so the card never counts again until remount; tint still shows. A cosmetic under-animation, not a rule failure. See NB-2.
+
+##### Defects
+
+None BLOCKING. No trace found where an interpolated number stays on screen past the cap, where the display settles on a non-server value, or where reduced motion loses the tint.
+
+**NB-1 — NaN balance re-renders forever.** Repro: a `balance` that is `NaN` (not producible from JSON; would need a client-side arithmetic bug) → `to = NaN` → `change.to !== to` is true on every render (`H:68`) → `setChange` every render → React "Too many re-renders" crash of the room page. Loud, not silent. Fix: compare with `Object.is` at `H:68` and `H:156`, or coerce non-finite values to `null` at `H:46`.
+
+**NB-2 — reduced-motion gate is one-way for a mount.** Repro: mount with reduce on, then turn it off in OS settings; every later change snaps with no count, because `useReducedMotion` captured `true` (`H:49`, library `use-reduced-motion.mjs:34`). Fix: drop the `reduceMotion === false` term at `H:87` and rely on the live `matchMedia` already at `H:88`, or subscribe via `matchMedia().addEventListener("change")`; keep the `!== null` semantics if you want SSR safety by checking `typeof window` instead.
+
+**NB-3 — hidden-tab cap exceeds 600 ms (rule 1 as literally written).** Repro: change lands while `document.hidden`; rAF is stalled; the 600 ms `setTimeout` (`H:124`) is throttled to the next 1 s wakeup; `from` holds ~1 s. Not observable by a user, and BD-18 already prices the visible half of it. Fix, if the literal rule matters: at `H:84` add `&& document.visibilityState === "visible"` so a change that lands hidden snaps, and/or listen for `visibilitychange` and call `end`.
+
+**NB-4 — rounding split between hook and consumer for fractional values.** Repro (unreachable today: whole dollars enforced): `from=100.2, to=100.6` → frames show `Math.round` → `101`, then rest shows `formatMoney` trunc → `100`. Fix: use `Math.trunc` at `H:160` or route the frame through `formatMoney`'s rule so both sites agree.
+
+**NB-5 — `halt()` ordering is load-bearing and undocumented.** `live = false` must precede `controls.stop()` because `JSAnimation.stop()` ticks `onUpdate` synchronously (`JSAnimation.mjs:46-48`). A reorder would leak one frame per stop (still caught by the `n` check at `H:159`, so not a correctness break, but a wasted render and a trap). Fix: one comment line at `H:101` naming the library behaviour.
+
+**NB-6 — completion path leaves the cap timer armed.** `end` from `onComplete` (`H:108-112`) does not `clearTimeout(cap)`; the timer fires at 600 ms into a no-op. Harmless; fix by clearing in `end` or leave with a comment.
+
+**NB-7 — a stream of changes keeps the tint in `hold` indefinitely.** Each change restarts the 900 ms hold (`H:134`). Design choice consistent with "direction matches the latest change"; note only.
+
+Overall verdict: **SOUND WITH CAVEATS** — rules 2, 3 and R hold under every interleaving tried; rule 1 holds for every visible frame, with the literal cap exceeded only in a hidden tab where timers are throttled (NB-3), a state no user can see.
+
 
 ---
 

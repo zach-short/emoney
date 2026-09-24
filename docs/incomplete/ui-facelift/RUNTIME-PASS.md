@@ -371,3 +371,67 @@ not an oversight.**
 - **Right answer.** +23,586 B gzipped is measured (`PLAN.md` Phase 4 *watch for*) but its effect
   on time-to-interactive is not. This joins R3.3's unmeasured scrim blur as the second thing this
   work has added to the room page that no device has judged.
+
+## Phase 5 — Cash count-up. Entries written 2026-09-24.
+
+**Nothing below was walked in a room.** The build session had no owner consent to move money
+against the production API, and the backend does not run on this machine (`CLAUDE.md`,
+*Commands*). What was walked: `hooks/use-count-up.ts` alone, in a throwaway local page (since
+deleted), with a `MutationObserver` logging every rendered string and its timestamp. The results:
+- One change, 1500 → 1750: counted in 448 ms and never left the range 1500 to 1750. Tint hold,
+  then fade at 907 ms, gone at 1208 ms. This was run twice, once with real rAF.
+- Two changes inside 600 ms (→2000, then →1900 at 200 ms): the count read $1,901 at 197 ms and
+  snapped to exactly $1,900 at 204 ms, with the tint flipping to debit.
+- A mid-count value (→2500, then →2600 at 100 ms) showed only $2,600 from 100 ms on.
+- A different player in the slot showed $900 at once, with no tint.
+- A repeated balance produced zero DOM mutations.
+- Reduced motion, emulated by overriding `matchMedia`: $900 → $1,150 at once, with the tint held
+  900 ms.
+- rAF stalled (the pane was a hidden tab): the previous value held until the cap snapped it at
+  607 ms.
+
+The harness proves the hook, not the card, not the room, not the real socket, and not the OS
+setting. The entries below are owed.
+
+**Fixture.** Any two-profile room where one profile is the banker. The throwaway room `UIP1CHK`
+(Phases 1-4) works if it still exists: Banker is `6ab2f0536bc35e3f6aa5f8d1`. Switch profiles with
+`localStorage.setItem('room_UIP1CHK_playerId', <id>)`. Run the frontend through `scripts/emoney
+dev` or on port 3000 with both API variables set (see Phase 4's header above).
+
+### R5.1 — Two transactions inside 600 ms never leave a wrong number. **NOT WALKED.**
+- **Where.** Two browser profiles in one room, both showing the same player's card, at 375×812
+  and at ≥`lg`. The banker taps ⊕ on that card, adds $250, then at once taps ⊖ and removes $100
+  (or has the second profile send a payment in the same second).
+- **Right answer.** The card settles on exactly the server's balance — start + 250 − 100 — on
+  **both** profiles, within 600 ms of the last message. Every number shown in between lies
+  between two server values. Reload the page: the number must not change.
+
+### R5.2 — A value landing mid-count snaps. **NOT WALKED in a room** (walked in the harness).
+- **Where.** Same room. Start a large change (the banker adds $1,000), then land a second one
+  within about 200 ms, from the other profile.
+- **Right answer.** The count toward the first target stops and the figure **jumps** to the
+  second server value. There is no second ease toward it. The ↑/↓ glyph and the wash take the
+  second change's direction.
+
+### R5.3 — Reduced motion keeps the information. **NOT WALKED at the OS level.**
+- **Where.** macOS System Settings → Accessibility → Display → Reduce motion ON, or DevTools →
+  Rendering → "Emulate CSS media feature prefers-reduced-motion: reduce". **Reload the room
+  afterwards**: `useReducedMotion` reads once at mount; the hook's live check covers a mid-session
+  toggle, but walk it with a reload first. Then have the banker add $250.
+- **Right answer.** The balance changes to the new value **at once**, with no count. The
+  green-tinted wash and the `↑` appear at once and stay about 900 ms, then **vanish without
+  fading**. A balance that changes with no wash is a **failure** ("animations off"). So is a wash
+  that fades.
+
+### R5.4 — The tint reads on the paper card and moves nothing. **NOT WALKED.**
+- **Where.** Any room, both widths. Credit a player, then debit them.
+- **Right answer.** Black figure on a light green wash with `↑` to its left for a credit; light
+  red wash with `↓` for a debit. The name bar, the Properties row and the Pay-or-Request button do
+  not move by a pixel while it shows. On a banker's view the `↑`/`↓` must not overlap the ⊖ icon,
+  which is 20px to the left.
+
+**Not a runtime entry, but owed with these:** Phase 5's fourth done-when is the Fable 5.1
+adversarial review of `hooks/use-count-up.ts`. **Done 2026-09-24: SOUND WITH CAVEATS, no
+blocking defect**, pasted verbatim into `PLAN.md` Phase 5 under *Fable 5.1 review*. Its NB-2 bears
+on R5.3: the reduced-motion gate is one-way for a mount (turning reduce **off** mid-session leaves
+the card snapping until a reload) — so walk R5.3 with a reload, as written.

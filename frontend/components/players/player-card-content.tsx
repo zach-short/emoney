@@ -13,6 +13,7 @@ import SendReqToggle from "./pay-req-toggle-switch";
 import PayRequestRent from "./pay.req.rent.component";
 import { numeralFace } from "../ui/fonts";
 import { formatMoney } from "@/lib/utils/money";
+import { TINT_FADE_MS, useCountUp } from "@/hooks/use-count-up";
 import PlayerTags from "./player-tags";
 import ManageProperties from "./manage-properties";
 import { BankerTransactionPayload, KickPlayerPayload, ManagePropertiesPayload, TransferType } from "@/types/payloads";
@@ -33,6 +34,44 @@ import {
 // readable at the call site instead of resting on Tailwind's emission order.
 const PROPERTIES_ROW =
   "items-center justify-between w-full rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black";
+
+// The card's balance, counting to the server's value (DESIGN.md D5). All the
+// logic is in `hooks/use-count-up.ts`; this only paints what it returns.
+//
+// The tint is a wash BEHIND the number, not a text colour: the card is white
+// paper and the money tokens are tuned for a black ground (`globals.css`), so
+// green text on it would not read. D2 wants a sign glyph beside every money
+// colour; it is an arrow, not +/-, because a "-" beside a balance reads as a
+// negative balance (PLAN.md BD-11). Both are absolutely placed or zero-net
+// padding, so nothing in the fixed card moves. The wash appears at once and
+// only its fade-out is a transition, which reduced motion removes.
+const TINT_WASH = { in: "bg-money-in/25", out: "bg-money-out/25" } as const;
+const TINT_GLYPH = { in: "↑", out: "↓" } as const;
+
+const BalanceFigure = ({ display, tint }: ReturnType<typeof useCountUp>) => {
+  const fading = tint?.phase === "fade";
+  const fade = fading
+    ? "motion-safe:transition-[background-color,opacity] motion-reduce:transition-none"
+    : "";
+  return (
+    <span
+      className={`relative -mx-1 rounded-md px-1 ${fade} ${tint && !fading ? TINT_WASH[tint.direction] : "bg-transparent"}`}
+      style={{ transitionDuration: `${TINT_FADE_MS}ms` }}
+    >
+      {tint && (
+        <span
+          aria-hidden
+          className={`absolute right-full top-1/2 -translate-y-1/2 mr-0.5 text-base ${fade} ${fading ? "opacity-0" : "opacity-100"}`}
+          style={{ transitionDuration: `${TINT_FADE_MS}ms` }}
+        >
+          {TINT_GLYPH[tint.direction]}
+        </span>
+      )}
+      {/* Every frame goes through the one formatter (D3(a)). */}
+      {formatMoney(display)}
+    </span>
+  );
+};
 
 const PlayerDetails = ({
   player,
@@ -118,6 +157,10 @@ const PlayerDetails = ({
   // payload missing the field never renders a live player as removed.
   const isRemoved = player?.isActive === false;
   const isOwnCard = currentPlayer?.id === player?.id;
+  // One count per card, painted at both balance sites below. Keyed on the
+  // player's id so a slot reused for someone else snaps instead of counting
+  // from one player's money to another's.
+  const balance = useCountUp(player?.balance, player?.id);
 
   const [dialogState, setDialogState] = useState<"add" | "remove" | null>(null);
   const [amount, setAmount] = useState("");
@@ -194,10 +237,10 @@ const PlayerDetails = ({
               prerenders every page (11/11 static) and a JS breakpoint read
               would disagree between the server and the first client frame.
 
-              PHASE 5, READ THIS: at `lg` the figure Phase 5 animates is
-              inside the <button> below, not the <p>. Both need the count-up. */}
+              At `lg` the figure is inside the <button> below, not the <p>.
+              Both paint the same `useCountUp` result (Phase 5). */}
           <p className={`${numeralFace} lg:hidden`}>
-            {formatMoney(player?.balance)}
+            <BalanceFigure {...balance} />
           </p>
           <PlayerGlance
             player={player}
@@ -208,7 +251,7 @@ const PlayerDetails = ({
               type="button"
               className={`${numeralFace} hidden rounded-md px-1 transition-colors hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black lg:block`}
             >
-              {formatMoney(player?.balance)}
+              <BalanceFigure {...balance} />
             </button>
           </PlayerGlance>{" "}
           {currentPlayer?.isBanker && !isRemoved && (
