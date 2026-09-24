@@ -408,12 +408,53 @@ correctness. **Supersession:** a future presence feature that needs to react to 
 known-`PLAYER_JOINED` puts its own refetch or its own handling back — this decision does not bind
 that feature, it only removes today's default.
 
+*As built, 2026-09-23 (Phase 1, uncommitted when written; `PLAN.md` §1 BD-2, BD-4):*
+- The skip extends the existing `OFFER_*` condition rather than adding a second idiom. It is
+  still a closed list of named types: `PLAYER_LEFT` joins the array, and a `PLAYER_JOINED` is
+  skipped when its `payload.playerId` is in `playersData.players` (the last applied list) and is
+  not `storedPlayerId` (`page.tsx:318-343`).
+- An unknown id, no list yet, or this client's own echo still refetches. `refetchOffers()` still
+  fires on both types.
+- The explicit resync is `resyncRoom`, an effect event called in `onopen` right after the `JOIN`
+  send (`page.tsx:379-383`, `:460-463`). It fetches players, properties and offers (D6) on every
+  open, the first included, and the socket effect's deps stay `[code, storedPlayerId]`.
+
 **D4 — A failed refetch keeps the last good room, toasts, and retries; the full-screen error stays
 for the initial load only.** (was Q4) Retry shape is dial §4's default: 3 attempts, 1 s / 2 s / 4 s,
 then wait for the next message. **Copy — plain, ratified:** *"Couldn't refresh the room.
 Retrying…"* The warm and terse variants are recorded in §4's dial table and are not used.
 **Defense:** closes §1.2's silent screen-blanking failure mode without a wire change.
 **Supersession:** none.
+
+*As built, 2026-09-23 (Phase 1, uncommitted when written; `PLAN.md` §1 BD-3, BD-5, BD-6, BD-7):*
+- **Where it lives.** Keep-last-good and the retry live in `usePublicFetch`, per effect run. After
+  a run's first success, a failure leaves `data` and `error` alone, calls the new
+  `onRefetchError` option once per failure cycle, and retries after `REFETCH_RETRY_DELAYS_MS`
+  (`[1000, 2000, 4000]`, `use-public-fetch.ts:14`).
+- **Which hooks toast.** The page wires `onRefetchError` to the players and properties hooks, and
+  the toast is this decision's copy byte for byte, U+2026 included. It carries a stable sonner
+  `id` and the landed `ERROR` toast's styling (`page.tsx:45-55`). Offers retries without a toast.
+- **How retries run.** Each new `refetch()` gets its own three retries. A pending retry is
+  cancelled by a new `refetch()`, and a dirty follow-up replaces the retry.
+- **Correction (R5) to this decision's "the full-screen error stays for the initial load".** On
+  `main` it never showed there. `DataState` renders the loader while `loading` is true
+  (`data-state.tsx:62`), and the page's `loading` is `!initialLoadComplete`, so a failed initial
+  load shows the dice loader, not `Fallback`, until some later fetch succeeds (`PLAN.md` §0
+  addendum A.7).
+- **Initial load unchanged.** Phase 1 left that path as it was: a pre-success failure still nulls
+  `data` and sets `error`, exactly as on `main`. With this decision's post-load path closed,
+  `Fallback` is now unreachable from the room page. Whether a failed initial load should show
+  it, which would be a one-line change to the page's `loading` prop, is Zach's call, raised
+  rather than built. The Phase 1 review traced the latch to commit `3389b36` (2025-05-21).
+- **The stuck-request finding: raised by the review, then built with Zach's approval (`PLAN.md`
+  §1 BD-8).** Single-flight meant a GET that never settles blocked that hook's later refetches,
+  the `onopen` resync included, and `frontend/lib/utils/api.ts` sets no request timeout.
+  - Each request now races a 10 s timer (`REQUEST_TIMEOUT_MS`), and a timeout takes this
+    decision's failure path like any other failure.
+  - The abandoned request is ignored, not cancelled. Cancelling would need a signal through
+    `api.service.ts`, which is outside Phase 1's two files.
+- **Retry timing.** Each of the 1 s, 2 s and 4 s waits counts from the previous failure. So when
+  requests fail fast, the retries land at about 1 s, 3 s and 7 s after the first failure.
 
 **D5 — E is wanted as a row.** (was Q5) Folded into D2 above rather than kept separate — same
 ratification, same turn.

@@ -72,14 +72,133 @@ merge will move again, so the build session re-derives them (Phase 1, step 0).
 | `room.client.tsx:36` | the unused `loading` prop | `room.client.tsx:53` (only occurrence, `grep -n loading`) |
 | — | `handleWebSocketNotification`, an effect event | `:187-243` |
 
+### §0 addendum — Phase 1 step 0, re-run 2026-09-23 by the build session (wins over the table above)
+
+Run in the build worktree, cut from `main` at `91a8f29` ("merge ui-facelift lane 1 onto main").
+Line numbers are `main`'s at `91a8f29`, **before** Phase 1's edits.
+
+| # | Claim | Verified state | Citation |
+|---|---|---|---|
+| A.1 | Both landing preconditions, plus facelift Lane 1 | **All three are ancestors of `main`.** Supersedes 0.2, 0.3 and 0.12's "unmerged". | `git merge-base --is-ancestor worktree-kick-phase4 main && echo …`, same for `worktree-frontend-sweep` and `worktree-ui-facelift`: all printed; `git diff --stat main...worktree-ui-facelift -- 'frontend/app/room/[code]/page.tsx'` empty |
+| A.2 | The two owned files since `a628b3a` | `page.tsx` +116/−35 over `8848ec7`, `5c311e7`, `34be5ac`, `be5080e` and their merges. `use-public-fetch.ts` unchanged (0.6 holds: `applyResponse` `:18-26`, catch-nulling `:57-61`, `refetch` `:76-86`). | `git diff --stat a628b3a main -- <both>`; `git log --oneline a628b3a..main -- <both>` |
+| A.3 | Importers (0.7) | Holds. The module has three importers (`page.tsx:16`, `create.tsx:10`, `join.tsx:12`); `usePublicFetch` has one caller, `page.tsx`, at three sites (`:52`, `:63`, `:76-78`). | `git grep -n use-public-fetch main -- frontend` |
+| A.4 | The merged handler's shape | As §2 step 0 expected, so no step changes: `ERROR` return `:226-235`; `BID_PLACED` early return `:245-268` (`liveBid` overlay `:248-258`, unknown-lot `refetchPlayers()` `:266-267`); success toast `:270-275`; `refetchOffers()` on every frame `:284`; `OFFER_*` skip `:288-294`; `refetchProperties` list `:310-319`, four types with `AUCTION_LOT_CLOSED` at `:315`; `onopen` → `JOIN` `:398-400`; `onclose` → reconnect after 1000 ms `:406-410`; socket deps `[code, storedPlayerId]` `:430`; `storedPlayerId` from `useStoredPlayerId(code)` `:40` | `page.tsx` read at `91a8f29` |
+| A.5 | Toast styling after facelift Lane 1 | Both landed toasts use `duration: 4000`, `position: "top-center"`, `className: \`font-semibold text-sm text-center\`` (`:229-233`, `:270-275`). The facelift's `text-xs` → `text-sm` is in. | same read |
+| A.6 | Backend payloads (0.14) | Hold, lines moved: `PLAYER_LEFT` `handler.go:109-116`, `playerId` `:112`; `PLAYER_JOINED` `:188-195`, `playerId` `:191`. `types/events.ts` declares neither shape. | `grep -n` over `backend/websocket/handler.go`, `frontend/types/events.ts` |
+| A.7 | **Correction (R5) to §2 step 3 ("so the initial load still ends in `Fallback`"), done-when (b)'s last bullet, and interleaving 7** | **On `main` a failed initial load does not show `Fallback`; it shows the dice loader until some later fetch succeeds.** `DataState` returns `LoadingComponent` whenever `loading` is true (`data-state.tsx:62`), before it reads `error` (`:64-65`), and the page passes `loading={!initialLoadComplete}` (`page.tsx:454`), which stays `true` until players and properties have both arrived (`:447-449`). So on `main`, `Fallback` was reachable only by a failure *after* the initial load, which is exactly the path D4 closes. Phase 1 keeps the pre-success path "exactly as it does on `main`" (step 3) and does **not** change the loader (no drive-by fix). After Phase 1, `Fallback` is unreachable from the room page. Whether a failed initial load should show `Fallback` is raised for Zach, not decided here. | `data-state.tsx:62-66`; `page.tsx:447-454` at `91a8f29` |
+| A.8 | §0.13's all-worktrees loop | **Not re-run.** The build ran worktree-isolated, and its git guard refuses git against any other checkout. Carried, not checked: the dispatcher's own loop over 24 worktrees, recorded in the primary checkout's uncommitted Phase 1 header, found no uncommitted edit to either owned file. | the guard's refusal, this session |
+| A.9 | Test runner (0.18) | Still none. | `grep -n -iE 'jest\|vitest\|playwright\|testing-library\|mocha\|"test"' frontend/package.json` → exit 1 |
+| A.10 | D4's copy (0.25) | Holds: `Retrying` + bytes `342 200 246` (U+2026). | `grep -o 'Retrying.' DESIGN.md \| od -c` |
+
 ---
 
 ## 1. Decisions taken since ratification
 
-**None.** Stage 4 wrote no code and took no build-level call. The calls this plan expects the
+Stage 4 wrote no code and took no build-level call. The calls this plan expects the
 build to take are listed in §3 as *BD at build*. Each already carries its one-line reversal, so
 the builder does not have to invent one. The build session records each here as `BD-1`, `BD-2`,
 … in the order it takes them (R12).
+
+**Phase 1's build, 2026-09-23 (uncommitted at the time of writing; line numbers are the final
+built files': `use-public-fetch.ts` sha1 `8cecb0b…`, `page.tsx` sha1 `61f3ddc…`).** BD-1 to BD-5
+take §3's recommended default each. BD-6 and BD-7 are not §3 dials. They are readings of step 3's
+text and of "at most one in flight", recorded so they are visible and reversible, not so they
+look like new scope. BD-8 is new scope that Zach approved after the review raised it.
+
+- **BD-1 — dial 3.1, coalescing shape: trailing edge, no delay.** A `refetch()` mid-flight sets
+  `run.dirty` (`use-public-fetch.ts:212-214`), and the settle path fires exactly one follow-up at
+  once (`:195-197`). *Reversal:* put a debounce window in front of the trailing refetch.
+- **BD-2 — dial 3.8: the `onopen` resync fires on every open, the first included.**
+  `resyncRoom` (`page.tsx:379-383`) is called after the `JOIN` send (`:460-463`). On a first
+  load it folds into whatever is in flight as a trailing follow-up. **Observed cost (walk,
+  R1.0):** the resync (~352 ms) and this client's own `PLAYER_JOINED` echo (~414–454 ms) fell into
+  different in-flight windows, so a first load made three sequential `GET /players` where `main`
+  makes two (mount plus echo). It is bounded, correct and loud, and it is this dial's price.
+  *Reversal:* skip the `onopen` refetch until the mount fetch has applied its first success.
+- **BD-3 — dial 3.9: keep-last-good and the retry live in the hook, so all three hooks get
+  them. D4's toast goes to the players and properties hooks only** (`page.tsx:78`, `:90`). The
+  offers hook retries silently. One sonner `id`, `room-refresh-failed` (`page.tsx:45-55`), so two
+  hooks failing together, or a second failure before a success, update one toast and do not
+  stack. *Reversal:* pass `onRefetchError: toastRoomRefreshFailed` to the offers hook too.
+- **BD-4 — dial 3.10: "known id" means the id is in `playersData.players`,** the last
+  successfully applied list, which includes inactive players. With no list applied yet, it
+  refetches (`page.tsx:323-343`). This client's own id always refetches. *Reversal:* compare
+  against the rendered `otherPlayers` instead.
+- **BD-5 — dial 3.11: `error` is set only before a run's first success** (`use-public-fetch.ts:165-170`).
+  **Later failures surface through a new `onRefetchError` option** (`:55-60`), fired once per
+  failure cycle (`:172-177`). A callback rather than a returned field, because the toast is an
+  event, and a field would need an effect in the page to watch it. *Reversal:* restore
+  `applyResponse`'s null-on-failure (`use-public-fetch.ts:22-24` at `91a8f29`).
+- **BD-6 — reading of step 3's retry text (not a §3 dial).**
+  - (i) Retries run only after a success: a pre-success failure behaves exactly as on `main`, so
+    no retry and no toast.
+  - (ii) Each external `refetch()` resets the retry count (`:203-210`). Each message whose own
+    fetch fails therefore gets up to three retries, while the toast stays once per cycle, where a
+    cycle ends on a success.
+  - (iii) A failure with the dirty flag set schedules no retry, because the trailing follow-up
+    *is* the next attempt (`:181-183`, interleaving 3).
+  - (iv) Each delay counts from the previous failure, so fast failures retry at about 1 s, 3 s
+    and 7 s after the first one (`RUNTIME-PASS.md` R1.2).
+
+  *Reversal:* for (i), retry pre-success failures too; for (ii), reset `retriesUsed` only on a
+  success.
+- **BD-7 — "at most one request in flight" is per effect run (not a §3 dial).** A change of
+  `enabled` or `dependencies`, and StrictMode's dev remount, dispose the run
+  (`use-public-fetch.ts:223-236`). Its in-flight request is abandoned on the wire, its response
+  is dropped (`:153`), and the new run fetches at once rather than waiting. The walk saw exactly
+  this under `next dev` from the build worktree: two overlapping `GET /properties` at 208 ms and
+  209 ms, then one trailing follow-up at 430 ms, after the second settled (`RUNTIME-PASS.md`
+  R1.0). *(An earlier "smoke load" cited here ran the primary checkout's `main`, not this build.
+  It is retracted; see R1.0.)*
+  `refetch()` while disabled is now a no-op (`:243-245`); on `main` it fetched with whatever
+  params it had. *Reversal:* make a new run wait for the abandoned request to settle before its
+  first request.
+- **BD-8 — a per-request timeout of 10 s (`REQUEST_TIMEOUT_MS`, `use-public-fetch.ts:22`).**
+  - **Why.** The review found that single-flight lets one GET that never settles freeze that
+    read, the `onopen` resync included. Zach approved adding a timeout on 2026-09-23; the
+    coordinating session relayed the approval.
+  - **How it works.** Each request races the timer (`:132-141`). A timeout settles as
+    `{ success: false, error: { status: 408, timedOut: true } }` and takes the ordinary failure
+    path: `inFlight` clears, then the retry or the dirty follow-up, and D4's toast once the room
+    has loaded. The timer is cleared on settle (`:146-149`) and on dispose (`:229-232`).
+  - **Why 10 s.** It is 20× the measured `/players` round trip (0.5 s, §0.21). It is also well
+    clear of DevTools' Slow 3G profile (about 2 s of latency) for a sub-kilobyte payload, so walk
+    (a) should never trip it.
+  - **Why a race in the hook, and not axios's `timeout` or an `AbortSignal`.** Both would mean
+    editing `api.ts` or `api.service.ts`, which sits outside Phase 1's two files, fails its
+    scope check, and would change `usePublicAction` too. So the abandoned request is not
+    cancelled, only ignored.
+  - **Why the error has no `message`.** `Fallback` prints `error.message` (`fallback.tsx:44-46`),
+    and a new string there would be new copy (R7).
+  - **Review.** The same review subagent re-checked this delta: T1 prevented with a caveat, T2–T5
+    prevented, and all earlier verdicts unchanged.
+  - *Reversal:* change the constant, or delete the race and the two `clearTimeout` blocks.
+
+**Raised by the Phase 1 review subagent, 2026-09-23. Each one is the owner's call.**
+- **RESOLVED by BD-8: a GET that never settles stalled that hook's refreshes (medium
+  confidence).** Before the timeout, single-flight turned every later trigger into
+  `dirty = true` while `run.inFlight` stayed set, and `frontend/lib/utils/api.ts` sets no axios
+  `timeout` (`grep -n timeout` → exit 1). Now each attempt is bounded at 10 s.
+  - **Caveat from the re-review.** The abandoned request is not cancelled. A retry can ride the
+    same dead connection and time out again, so recovery waits on the browser giving up on it.
+    A dead-API cycle now spans about 47 s (four 10 s attempts plus 1, 2 and 4 s of backoff), not
+    about 7 s.
+  - **What walk (a) may see.** If any GET goes past 10 s under Slow 3G, the Network panel can show
+    more than two `/players`. The extra one is the ignored, abandoned request, not a coalescing
+    failure.
+- **Once the retries run out, later failures are silent (low confidence; matches the stated
+  contract).** `failing` resets only on a success (`use-public-fetch.ts:161`, `:174-177`), so a
+  later message's failed refetch restarts the retries with no toast. The toast lasts 4 s, and
+  the retries take about 7 s, or up to about 47 s when every attempt times out. Any new copy for
+  this is an R7 ask.
+- **The initial-load `Fallback` is unreachable, and the cause is older than this plan.** See
+  step 3's correction and §0 A.7. This is a new board item.
+- **Outside this diff (it came with `frontend-sweep` `5c311e7`; medium-low confidence; not
+  observed).** On a hard reload, the hydrating commit's passive effects may run while
+  `storedPlayerId` is still `null`, so the socket effect's "No player found for this room" toast
+  (`page.tsx:446-448`) may fire on every direct load of a room URL. *Not reproduced on the one
+  direct load checked for it:* a body-text read 1 s after load found "has joined the game" and no
+  "No player found" (`RUNTIME-PASS.md` R1.0). One sample does not clear it.
 
 ---
 
@@ -91,9 +210,20 @@ the builder does not have to invent one. The build session records each here as 
 
 ### Phase 1 — Coalesced, ordered, failure-tolerant room refetch
 
-**Status: `HELD` — waits on (1) GATE 2, and (2) both `worktree-kick-phase4` (`8848ec7`, board row
-7 Phase 5) and `worktree-frontend-sweep` (`5c311e7`, board row 1) landing on `main`. As of
-2026-09-23 neither has landed (§0.2, §0.3).** Driver: Opus 5. **Files it owns:**
+**Status: `BUILT 2026-09-23, commit <owed: fill in the hash once Zach commits>`.**
+- **Where.** Built in worktree `worktree-agent-a44b106d831121f4d`, cut from `main` at `91a8f29`.
+  Both preconditions and GATE 2 were met (§0 addendum A.1).
+- **Gates.** Green, and all three scope checks empty.
+- **Review.** Eight interleavings, then a re-check of the timeout delta. The verdicts are in the
+  close-out; #7 fails only on the pre-existing latch (step 3's correction).
+- **Walk** (`RUNTIME-PASS.md`):
+  - R1.0 and R1.3 (both halves) walked.
+  - (a), (b) and (e) wait on Zach's own go-ahead in the build session, or on his own walk.
+  - (d) waits on the deploy.
+- *(Merge note: the primary checkout holds an uncommitted "IN FLIGHT" edit to this same
+  paragraph. This BUILT text supersedes it.)*
+
+Driver: Opus 5. **Files it owns:**
 `frontend/app/room/[code]/page.tsx`, and `frontend/hooks/use-public-fetch.ts`, whose
 `usePublicFetch` export only it may change. It owns no other file.
 
@@ -136,6 +266,16 @@ the builder does not have to invent one. The build session records each here as 
 
    Before the first success, a failure behaves exactly as it does on `main`, so the initial load
    still ends in `Fallback`.
+
+   > **Correction (R5), 2026-09-23 — the second half of that sentence is disproven.** The
+   > first half was built as written. The initial load does **not** end in `Fallback`, on `main`
+   > or after Phase 1. `initialLoadComplete` latches only once `playersData` and
+   > `propertiesData` are both non-null (`page.tsx:510-512` as built), so after a failed initial
+   > load the page passes `loading={!initialLoadComplete}` = `true` (`:517`). `DataState` checks
+   > `loading` (`data-state.tsx:62`) before `error` (`:64-65`), so the dice loader renders and
+   > `Fallback` is never reached. The latch predates this plan (commit `3389b36`, 2025-05-21, per
+   > the Phase 1 review), and Phase 1 did not touch it. It is a pre-existing bug, raised as a
+   > new board item and not fixed here. See §0 addendum A.7.
 
    Retry with backoff: 3 attempts, at 1 s, 2 s and 4 s after the failure, then stop and wait
    for the next `refetch()` call. Each value is one named constant (dial 3.2). A `refetch()`
@@ -191,7 +331,8 @@ failure, and how it knows, with a `file:line`:
 6. the dependency changes mid-flight (`storedPlayerId` going from `null` to an id under
    `useStoredPlayerId`): the response for the stale dependency is not applied;
 7. the initial load fails: `Fallback` shows, and its Try Again (`page.tsx:378-381` on `main`)
-   recovers;
+   recovers; *(the review found this NOT PREVENTED, because of the pre-existing latch in step 3's
+   correction, not because of Phase 1's diff)*
 8. all three retries fail: no further request goes out until the next message, and the toast
    does not stack.
 
@@ -265,9 +406,13 @@ through `scripts/emoney dev`; port 3000 is required by `backend/main.go:24` and
   - The observer's room **stays on screen**, with no full-screen "Something went wrong".
   - A toast reading exactly `Couldn't refresh the room. Retrying…` shows **once**.
   - The Network panel shows three retries at about 1 s, 2 s and 4 s, and then nothing.
+    **Corrected 2026-09-23:** each delay counts from the *previous* failure, so fast-failing
+    blocked requests land at about 1 s, 3 s and 7 s after the first one (`RUNTIME-PASS.md`
+    R1.2).
   - Unblock, and the next action brings one `GET /players` and a current room.
   - Then reload the page with the block still on: the full-screen `Fallback` **does** show,
-    because it is an initial load (D4).
+    because it is an initial load (D4). **Corrected 2026-09-23 (R5):** it will not. The dice
+    loader shows and stays, as on `main`. See the correction under step 3.
 - **(c) D3's skip.** The other client closes its tab. The observer toasts "… has left the game"
   and makes **zero** `GET /players` and one `GET /offers`. The other client reopens the room: the
   observer toasts "… has joined the game" and again makes **zero** `GET /players` and one

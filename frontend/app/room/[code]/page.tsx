@@ -32,6 +32,28 @@ interface WebSocketMessage {
 // against these declarations, on this side or the Go one.
 type BidPlacedPayload = Omit<BidPlaced, "type">;
 
+// PLAYER_JOINED carries the joiner's id (the JOIN case in
+// `backend/websocket/handler.go`). `types/events.ts` declares no shape for it,
+// and the rejoin check below reads this one field and nothing else.
+type PlayerJoinedPayload = { playerId?: string };
+
+// D4's copy, ratified verbatim (room-state-sync DESIGN.md D4): a room refetch
+// failed after the room had loaded, so the last good room stays on screen and
+// the hook retries. One stable id, so the players read and the properties read
+// failing together, or failing again before a success, replace this toast
+// rather than stacking a second one. Styled as the ERROR branch's toast below.
+const ROOM_REFRESH_FAILED = "Couldn't refresh the room. Retrying…";
+const ROOM_REFRESH_FAILED_TOAST_ID = "room-refresh-failed";
+
+const toastRoomRefreshFailed = () => {
+  toast.error(ROOM_REFRESH_FAILED, {
+    id: ROOM_REFRESH_FAILED_TOAST_ID,
+    duration: 4000,
+    position: "top-center",
+    className: `font-semibold text-sm text-center`,
+  });
+};
+
 const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
   const { code } = use(params);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -53,6 +75,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     resourceParams: [code],
     dependencies: [code, storedPlayerId],
     enabled: !!code && !!storedPlayerId,
+    onRefetchError: toastRoomRefreshFailed,
   });
 
   const {
@@ -64,6 +87,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
     resourceParams: [code],
     dependencies: [code],
     enabled: !!code,
+    onRefetchError: toastRoomRefreshFailed,
   });
 
   // The inbox: every PENDING offer this player made or was made to. Its own
@@ -72,7 +96,10 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
   // on mount -- an offer lives in Mongo so a reload mid-offer finds it --
   // and refetched on every websocket message below except BID_PLACED (see
   // that case), so a dropped OFFER_RECEIVED frame is caught by the next
-  // frame of any kind other than a bid.
+  // frame of any kind other than a bid. A failed refetch here keeps the last
+  // good inbox and retries like the room's, but does not toast: the room
+  // toast is about the room, and the next frame's refetch is this read's
+  // backstop.
   const { data: offersData, refetch: refetchOffers } = usePublicFetch<{
     offers: Offer[];
   }>(roomApi.getOffers, {
@@ -276,18 +303,40 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
 
       // Every frame that reaches here refetches the inbox, not only the
       // offer ones: that is what makes a dropped OFFER_RECEIVED recoverable,
-      // and the reconnect's own JOIN broadcast covers a socket that was down
-      // when it was sent. BID_PLACED never reaches here (it returns above,
+      // and the socket's own `onopen` resync (below) covers a socket that was
+      // down when it was sent. BID_PLACED never reaches here (it returns above,
       // "Toast per bid") -- a dropped OFFER_RECEIVED is still caught by the
       // next non-bid frame, since a lot's bids are the only frames this
       // handler now suppresses.
       refetchOffers();
 
-      // The three private offer frames move no money and change no card, so
-      // the room read is skipped for them; everything else refetches it.
+      // The room read is skipped where nothing in it changed. The three
+      // private offer frames move no money and change no card. PLAYER_LEFT is
+      // presence only and writes no document (D3), and so is a PLAYER_JOINED
+      // for a player already in the last room this client applied, other than
+      // this client itself: a rejoin. Everything else refetches it -- a
+      // PLAYER_JOINED for an id not yet on screen is a new player whose card
+      // has to appear, and this client's own join echo still refetches too.
+      // The list stays closed and named, never "skip what is not recognised":
+      // a type this page does not know refetches, which is how the backend
+      // ships ahead of the frontend.
+      const joinedId =
+        message.type === "PLAYER_JOINED"
+          ? (message.payload as PlayerJoinedPayload)?.playerId
+          : undefined;
+      const isRejoin =
+        !!joinedId &&
+        joinedId !== storedPlayerId &&
+        !!playersData?.players?.some((p: Player) => p.id === joinedId);
+
       if (
-        !["OFFER_RECEIVED", "OFFER_SENT", "OFFER_RESOLVED"].includes(
-          message.type,
+        !(
+          [
+            "OFFER_RECEIVED",
+            "OFFER_SENT",
+            "OFFER_RESOLVED",
+            "PLAYER_LEFT",
+          ].includes(message.type) || isRejoin
         )
       ) {
         refetchPlayers();
@@ -319,6 +368,19 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
       }
     },
   );
+
+  // The reconnect resync, stated rather than left to the JOIN echo (D3): every
+  // open of the socket, the first included, re-reads the whole room --
+  // players, properties and offers (D6) -- so a socket that was down while
+  // something moved catches up on its own. Coalescing in `usePublicFetch`
+  // absorbs the overlap with the mount fetch and with this client's own
+  // PLAYER_JOINED echo. An effect event, like the handler above, so the socket
+  // effect need not re-run (and reconnect) on every render.
+  const resyncRoom = useEffectEvent(() => {
+    refetchPlayers();
+    refetchProperties();
+    refetchOffers();
+  });
 
   const handleFreeParkingAction = (
     amount: string,
@@ -397,6 +459,7 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
 
       socket.onopen = () => {
         sendMessage(socket, "JOIN", { playerId: storedPlayerId });
+        resyncRoom();
       };
 
       socket.onerror = (error) => {
