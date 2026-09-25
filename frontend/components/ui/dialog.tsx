@@ -27,7 +27,12 @@ const DialogOverlay = React.forwardRef<
       // measured defect. Phase 3 turns both pinned dialogs into black cards,
       // so without this a dialog over a black room reads as a full-screen
       // page -- exactly what D4 exists to fix. The count stays at four.
-      "fixed inset-0 z-50 bg-black/55 backdrop-blur-[12px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/55 backdrop-blur-[12px]",
+      // Reduced-motion gate, matching `ui/popover.tsx`: only `animate-in` /
+      // `animate-out` start an animation, so both carry `motion-safe:` --
+      // under `prefers-reduced-motion: reduce` the overlay appears and goes
+      // at once instead of fading.
+      "motion-safe:data-[state=open]:animate-in motion-safe:data-[state=closed]:animate-out motion-safe:data-[state=closed]:fade-out-0 motion-safe:data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -44,7 +49,13 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-modal duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-modal sm:rounded-lg",
+        // Same gate as the overlay above and `ui/popover.tsx`: `duration-200`
+        // is a value class that feeds the animate-in/out transition, so it
+        // carries the same `motion-safe:` prefix as the animate-in/out
+        // classes themselves -- under reduced motion the dialog is simply
+        // there, with no fade, zoom or slide.
+        "motion-safe:duration-200 motion-safe:data-[state=open]:animate-in motion-safe:data-[state=closed]:animate-out motion-safe:data-[state=closed]:fade-out-0 motion-safe:data-[state=open]:fade-in-0 motion-safe:data-[state=closed]:zoom-out-95 motion-safe:data-[state=open]:zoom-in-95 motion-safe:data-[state=closed]:slide-out-to-left-1/2 motion-safe:data-[state=closed]:slide-out-to-top-[48%] motion-safe:data-[state=open]:slide-in-from-left-1/2 motion-safe:data-[state=open]:slide-in-from-top-[48%]",
         className
       )}
       {...props}
