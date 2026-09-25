@@ -49,4 +49,13 @@ type Auction struct {
 	// as "nobody". nil serialises as null, and no omitempty, so the key is
 	// always present on the wire.
 	HighBidderID *primitive.ObjectID `bson:"highBidderId" json:"highBidderId"`
+
+	// LotCount is how many deeds this auction runs through in total: the open
+	// lot plus everything in Queue at the moment handleKickPlayer opens it. It
+	// does not shrink as lots close - PropertyID and Queue already do that job
+	// - which is what lets a client derive the open lot's 1-based position as
+	// LotCount - len(Queue) and show "lot 2 of 4" even after a reload. Before
+	// this field the total was only ever stated in AUCTION_STARTED's transient
+	// lotCount, which a reloading client never sees again (PASSOFF.md row 27).
+	LotCount int `bson:"lotCount" json:"lotCount"`
 }

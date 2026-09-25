@@ -78,9 +78,13 @@ export interface OfferAccepted {
 
 // Raised by an AUCTION kick, once, after PLAYER_KICKED and only when the
 // removed player actually held a deed. `lotCount` is how many deeds the whole
-// auction will run through -- it is the only place that total is ever stated,
-// and it is not on the Room document, so a client that reloads mid-auction
-// cannot recover it. Nothing in the panel is allowed to depend on it.
+// auction will run through. It is corrected as of PASSOFF.md row 27:
+// `models.Auction` now carries the same total, as `lotCount`, on the Room
+// document itself (`frontend/types/schema.ts`), which is what a client that
+// reloads mid-auction actually reads. The field here stays transient and
+// panel-facing code still does not read it -- it is redundant with the
+// broadcast's `notification` and `propertyId`, kept only because every other
+// arm of this union states what changed.
 export interface AuctionStarted {
   type: "AUCTION_STARTED";
   notification: string;

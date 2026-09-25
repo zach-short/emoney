@@ -1427,6 +1427,7 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 					Queue:          queue,
 					HighBid:        0,
 					HighBidderID:   nil,
+					LotCount:       len(lots),
 				}}},
 			)
 			if err != nil {
@@ -1771,6 +1772,7 @@ func advanceAuction(auction models.Auction) *models.Auction {
 		Queue:          rest,
 		HighBid:        0,
 		HighBidderID:   nil,
+		LotCount:       auction.LotCount,
 	}
 }
 

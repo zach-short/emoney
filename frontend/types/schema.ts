@@ -44,6 +44,14 @@ export type Auction = {
   // null until somebody bids. Go writes the key unconditionally (no
   // `omitempty`), so this is null rather than absent.
   highBidderId: string | null;
+  // How many deeds this auction runs through in total: fixed when the kick
+  // opens it and carried forward by every advance
+  // (backend/websocket/websocketManager.go), so it survives a reload the way
+  // `queue`'s shrinking length does not. The open lot's 1-based position is
+  // derived on this side as `lotCount - queue.length` -- there is no separate
+  // lot-number field, because that subtraction is always right and a second
+  // number would just be one more thing the two sides could disagree on.
+  lotCount: number;
 };
 
 export type Player = {

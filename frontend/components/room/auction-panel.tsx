@@ -56,6 +56,17 @@ const AuctionPanel = ({
   // raise is $1 (D15), which on whole dollars is exactly "beats the high bid".
   const minimum = auction.highBid + 1;
 
+  // The open lot's 1-based position, e.g. "2 of 4" -- PASSOFF.md row 27, the
+  // thing kick Phase 3's panel could not say. Derived from `auction.queue`,
+  // not `upcoming`: the latter drops any id that fails to resolve to a deed
+  // (auction-bar.tsx's filter), which would undercount how many are left.
+  // Guarded on lotCount rather than shown unconditionally: an auction opened
+  // by a pre-row-27 deploy and still running when this ships has no lotCount
+  // in Mongo, decodes to 0, and "2 of 0" would be a worse lie than saying
+  // nothing.
+  const lotNumber =
+    auction.lotCount > 0 ? auction.lotCount - auction.queue.length : null;
+
   // The field follows the minimum until the player types in it, and starts
   // following again the moment the lot changes or they place a bid. Following
   // is what makes a fast auction usable -- the common action is "bid one more
@@ -175,6 +186,9 @@ const AuctionPanel = ({
       )}
 
       <div className={`flex flex-col gap-y-2`}>
+        {lotNumber !== null && (
+          <Row label="Lot" value={`${lotNumber} of ${auction.lotCount}`} />
+        )}
         <Row
           label="High bid"
           value={

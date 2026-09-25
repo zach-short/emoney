@@ -56,6 +56,7 @@ func openAuction() models.Auction {
 		Queue:          []primitive.ObjectID{testNextLotID, testThirdLot},
 		HighBid:        0,
 		HighBidderID:   nil,
+		LotCount:       3,
 	}
 }
 
@@ -371,6 +372,23 @@ func TestAdvanceAuctionEndsAfterTheLastDeed(t *testing.T) {
 	}
 	if after := advanceAuction(*next); after != nil {
 		t.Fatalf("got %+v after the last lot, want nil", after)
+	}
+}
+
+func TestAdvanceAuctionCarriesLotCountForward(t *testing.T) {
+	// The bug this pins (PASSOFF.md row 27): a next-lot literal that forgot
+	// LotCount would reset the auction's total to zero on the second deed
+	// onward, and the client's "lot N of LotCount" would read "lot 0 of 0"
+	// for every lot after the first.
+	auction := openAuction()
+	auction.LotCount = 4
+
+	got := advanceAuction(auction)
+	if got == nil {
+		t.Fatal("got nil, want the next lot")
+	}
+	if got.LotCount != 4 {
+		t.Fatalf("lot count is %d, want 4", got.LotCount)
 	}
 }
 
