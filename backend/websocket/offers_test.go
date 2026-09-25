@@ -1,10 +1,12 @@
 package websocket
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/zachmshort/emoney-backend/models"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -677,6 +679,140 @@ func TestTradePreconditionsLeavesDevelopedDeedsTradeable(t *testing.T) {
 	err := tradePreconditions(alice(), bob(), side(0, deed1Hex), side(0), deeds)
 	if err != nil {
 		t.Fatalf("expected a developed, mortgaged deed to be tradeable, got %v", err)
+	}
+}
+
+// --- offerClaims and claimRejection ---
+//
+// The claims are the writes that put a CREATE_OFFER in write conflict with a
+// concurrent kick (board row 34). No test here can show two real transactions
+// colliding, because that needs Mongo. No test here can show the handler still
+// makes the claims either, because they sit below its first Mongo call. What
+// these pin is the shape of the write. That is the part a well-meant edit can
+// break while every gate stays green.
+
+// playerDocumentFields is every field models.Player reads from a Player
+// document, by its bson name.
+func playerDocumentFields() map[string]bool {
+	fields := make(map[string]bool)
+	typ := reflect.TypeOf(models.Player{})
+	for i := 0; i < typ.NumField(); i++ {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("bson"), ",")
+		if name != "" && name != "-" {
+			fields[name] = true
+		}
+	}
+	return fields
+}
+
+func TestOfferClaimsClaimBothPlayersTheOfferNames(t *testing.T) {
+	// Either player can be the one a concurrent kick removes. The banker can
+	// kick the recipient, or kick themselves mid-offer (D12). Claiming only
+	// one of them leaves the gap open for the other.
+	offer := pendingOffer()
+	claims := offerClaims(offer, "Alice", "Bob")
+	if len(claims) != 2 {
+		t.Fatalf("got %d claims, want one for each player the offer names", len(claims))
+	}
+	for i, want := range []struct {
+		id   primitive.ObjectID
+		name string
+	}{
+		{offer.FromPlayerID, "Alice"},
+		{offer.ToPlayerID, "Bob"},
+	} {
+		if got := claims[i].filter["_id"]; got != want.id {
+			t.Fatalf("claim %d is on %v, want %s's document %v", i, got, want.name, want.id)
+		}
+		if claims[i].name != want.name {
+			t.Fatalf("claim %d is refused in %q's name, want %q", i, claims[i].name, want.name)
+		}
+	}
+}
+
+func TestOfferClaimsArePinnedToAnActivePlayerInThisRoom(t *testing.T) {
+	// The pin is what the create's reads just saw. It is defence in depth,
+	// not the mechanism: if a later edit moves the reads off the
+	// transaction's ctx, this is the clause that still refuses a player the
+	// kick has already marked gone.
+	offer := pendingOffer()
+	claims := offerClaims(offer, "Alice", "Bob")
+	for i, id := range []primitive.ObjectID{offer.FromPlayerID, offer.ToPlayerID} {
+		want := bson.M{"_id": id, "roomId": offer.RoomID, "isActive": true}
+		if !reflect.DeepEqual(claims[i].filter, want) {
+			t.Fatalf("claim %d filter is %v, want %v", i, claims[i].filter, want)
+		}
+	}
+}
+
+func TestOfferClaimsWriteAValueOnlyThisOfferCarries(t *testing.T) {
+	// The load-bearing property. The claim only works if it really writes,
+	// and an update that leaves the document as it was changes nothing.
+	// Setting isActive: true on an active player, or any constant, would
+	// change the document at most once and then be a no-op on every offer
+	// after. The fix would still compile and pass every gate while guarding
+	// nothing. The offer's own id is new on every offer, so the claim always
+	// changes the document.
+	offer := pendingOffer()
+	another := pendingOffer()
+	another.ID = mustObjectID("507f1f77bcf86cd799439032")
+
+	want := bson.M{"$set": bson.M{offerClaimField: offer.ID}}
+	for i, claim := range offerClaims(offer, "Alice", "Bob") {
+		if !reflect.DeepEqual(claim.update, want) {
+			t.Fatalf("claim %d update is %v, want %v", i, claim.update, want)
+		}
+	}
+
+	first := offerClaims(offer, "Alice", "Bob")[0].update
+	second := offerClaims(another, "Alice", "Bob")[0].update
+	if reflect.DeepEqual(first, second) {
+		t.Fatalf("two different offers write the same claim %v - the second would change nothing", first)
+	}
+}
+
+func TestOfferClaimsWriteNoFieldTheGameReads(t *testing.T) {
+	// The claim must not change the game. It writes one field, and that
+	// field is not any field a Player document is read for, so no balance,
+	// banker flag or active flag can move because an offer was made.
+	for i, claim := range offerClaims(pendingOffer(), "Alice", "Bob") {
+		set, ok := claim.update["$set"].(bson.M)
+		if !ok || len(claim.update) != 1 || len(set) != 1 {
+			t.Fatalf("claim %d update is %v, want a single $set of one field", i, claim.update)
+		}
+		for field := range set {
+			if playerDocumentFields()[field] {
+				t.Fatalf("claim %d writes %q, which models.Player reads - the claim would change the game", i, field)
+			}
+		}
+	}
+}
+
+func TestClaimRejectionRefusesAPlayerTheClaimDidNotMatch(t *testing.T) {
+	// A claim that matched nothing found the player gone. It is the same
+	// refusal tradePreconditions gives from the read, so it says the same
+	// thing.
+	err := claimRejection("Bob", 0, 0)
+	wantErrEqual(t, err, "Bob is no longer in the game")
+
+	to := bob()
+	to.IsActive = false
+	viaRead := tradePreconditions(alice(), to, side(100, deed1Hex), side(0, deed2Hex), tableDeeds())
+	wantErrEqual(t, err, viaRead.Error())
+}
+
+func TestClaimRejectionRefusesAClaimThatChangedNothing(t *testing.T) {
+	// Matched, but nothing written. The write did not change the document,
+	// so it cannot be relied on to conflict with a concurrent kick. Saving
+	// the offer on top of it would silently bring back the gap the claim
+	// exists to close. Refused so that any regression fails loudly.
+	err := claimRejection("Bob", 1, 0)
+	wantErrEqual(t, err, "failed to hold Bob's place while saving the offer - try again")
+}
+
+func TestClaimRejectionAcceptsAClaimThatWrote(t *testing.T) {
+	if err := claimRejection("Bob", 1, 1); err != nil {
+		t.Fatalf("expected a claim that matched and wrote to clear, got %v", err)
 	}
 }
 

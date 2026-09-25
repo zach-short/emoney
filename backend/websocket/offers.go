@@ -388,12 +388,85 @@ func deedsByID(deeds []models.Property) map[primitive.ObjectID]models.Property {
 	return byID
 }
 
+// offerClaimField is the one field a CREATE_OFFER writes to each player it
+// names. It holds the id of the last offer that claimed the player. Nothing
+// reads it, and models.Player does not map it, so every decode in this repo
+// skips it and it never reaches a client. It exists to be written: see the
+// claims in handleCreateOffer for why the write is needed at all.
+const offerClaimField = "offerClaim"
+
+// offerClaim is one write that puts a player's document into a create's write
+// set, plus the name to use if it is refused.
+type offerClaim struct {
+	name   string
+	filter bson.M
+	update bson.M
+}
+
+// offerClaims is the pair of writes handleCreateOffer makes before it inserts
+// offer: one to each player the offer names. It is pure and takes the offer
+// being inserted, so the three properties the claims rely on can be tested
+// without Mongo:
+//
+//   - both players are claimed. Either one can be the player a concurrent kick
+//     removes, since a banker can kick the recipient or kick themselves (D12).
+//   - each is pinned to an active player in this room. That is what the
+//     create's reads just saw, so on the attempt that read it the pin always
+//     matches. It is defence in depth, not the mechanism.
+//   - the value written is this offer's own id, which no document holds yet.
+//     So the write always changes the document. An update that changes
+//     nothing reports ModifiedCount 0, and a write that changed nothing cannot
+//     be relied on to conflict with anything.
+func offerClaims(offer models.Offer, fromName, toName string) []offerClaim {
+	claim := func(playerID primitive.ObjectID, name string) offerClaim {
+		return offerClaim{
+			name:   name,
+			filter: bson.M{"_id": playerID, "roomId": offer.RoomID, "isActive": true},
+			update: bson.M{"$set": bson.M{offerClaimField: offer.ID}},
+		}
+	}
+	return []offerClaim{
+		claim(offer.FromPlayerID, fromName),
+		claim(offer.ToPlayerID, toName),
+	}
+}
+
+// claimRejection reads the result of one claim and reports why the offer may
+// not be saved, or nil if it may.
+//
+// A claim that matched nothing found the player no longer active. The pin's
+// other clauses, _id and roomId, are the ones the read that came before it
+// already confirmed. That is tradePreconditions' refusal, reached another way,
+// so it uses the same sentence. It cannot happen while the reads are on the
+// transaction's ctx. It is here for a future edit that moves them off it.
+//
+// A claim that matched but modified nothing is the claim failing silently.
+// The write did not change the document, so it cannot be relied on to
+// conflict with a concurrent kick, and saving the offer on top of it would
+// quietly bring back the gap the claim exists to close. It cannot happen while
+// the value is a fresh offer id. It is refused so that a later edit that
+// breaks that fails loudly, not silently.
+func claimRejection(name string, matched, modified int64) error {
+	if matched == 0 {
+		return fmt.Errorf("%s is no longer in the game", name)
+	}
+	if modified == 0 {
+		return fmt.Errorf("failed to hold %s's place while saving the offer - try again", name)
+	}
+	return nil
+}
+
 // handleCreateOffer stores a new offer and sends it to the one player it is
 // for. With counterOf set it is also the counter: the offer it answers is
 // marked COUNTERED in the same transaction as the insert, pinned to PENDING
 // and to the two players being swapped, so a counter to an offer that has
 // since been answered is refused rather than leaving two live offers between
 // the same two people for the same deeds.
+//
+// Before the insert, it writes to both players' documents (offerClaims), so a
+// concurrent kick of either player cannot commit without meeting this
+// transaction. The comment at the claims walks through why a read alone is not
+// enough.
 //
 // Everything above the first Mongo call is payload shape and offerRejection,
 // and it is above it on purpose: config.DB is nil in a test binary, so a
@@ -531,11 +604,68 @@ func (rm *RoomManager) handleCreateOffer(client *Client, message Message) error 
 		}
 		// Checked at creation as well as at settlement, so a player composing
 		// from a stale screen - a deed that changed hands since their card
-		// was drawn - is told now, not when the other player taps Accept. The
-		// settlement's own check is the one that counts; this one is for the
-		// message.
+		// was drawn - is told now, not when the other player taps Accept. For
+		// the deeds, the settlement's own check is the one that counts; this
+		// one is for the message. Whether both players are still in the game
+		// is different: the claims below make that part of this check hold
+		// at commit.
 		if err := tradePreconditions(fromPlayer, toPlayer, give, get, deeds); err != nil {
 			return nil, err
+		}
+
+		// The claims: one real write to each player's document. They are
+		// what stops a kick from slipping a stale offer past itself.
+		//
+		// Everything above is a read, and a read never takes part in Mongo's
+		// write-conflict check. Without these writes, a kick could land in
+		// the middle of this create and nothing would stop it:
+		//
+		//   1. this callback reads the recipient as active;
+		//   2. a kick of the recipient starts, marks them isActive:false,
+		//      and closes their PENDING offers. Its snapshot cannot hold this
+		//      offer, because this offer has not been written yet;
+		//   3. the kick commits;
+		//   4. this callback inserts the offer, a new document the kick never
+		//      wrote, and commits.
+		//
+		// The two transactions write no document in common, so both commit
+		// and a PENDING offer names a player who is gone.
+		//
+		// handleKickPlayer always writes the removed player's own document.
+		// Writing both players' documents here puts this create and any
+		// concurrent kick of either one on the same document. Two
+		// transactions that write the same document cannot both commit
+		// unless one of them committed before the other took its snapshot.
+		// Otherwise the second to write it gets a WriteConflict, which is
+		// transient, and WithTransaction re-runs that one's callback. So one
+		// of two orders survives, and both are right:
+		//
+		//   - the kick first: this callback re-runs, re-reads the player as
+		//     inactive, and tradePreconditions refuses the offer;
+		//   - this create first: the kick re-runs, its new snapshot holds
+		//     this offer, and its sweep closes it DENIED with the rest.
+		//
+		// This works the way the accept's claim on the offer does. The pin
+		// cannot fail on the attempt that read it, because every read above
+		// is on ctx. What protects this is the conflict, and
+		// claimRejection's MatchedCount check is defence against a future
+		// edit that reads outside the transaction.
+		//
+		// The value written must change the document, and offerClaims says
+		// why. It is the offer's id, built once above, so a retry writes the
+		// same id. That is fine: the attempt that wrote it was rolled back.
+		//
+		// A side effect: anything else that writes either player during a
+		// create, such as a transfer or a settlement, now costs this callback
+		// one re-run against fresh state. That is harmless.
+		for _, claim := range offerClaims(offer, fromPlayer.Name, toPlayer.Name) {
+			result, err := playerColl.UpdateOne(ctx, claim.filter, claim.update)
+			if err != nil {
+				return nil, fmt.Errorf("failed to hold %s's place while saving the offer: %w", claim.name, err)
+			}
+			if err := claimRejection(claim.name, result.MatchedCount, result.ModifiedCount); err != nil {
+				return nil, err
+			}
 		}
 
 		if counterOf != nil {
