@@ -96,7 +96,8 @@ machine.
 | `backend/deploy/` | systemd unit, Caddyfile, `deploy.sh`, env example | Secrets — the real env lives at `/etc/emoney/emoney.env` on the VM |
 
 > **Exception to the `components/ui/` rule, ratified 2026-09-22** (UI-facelift GATE 1, decision
-> `D8` in `docs/incomplete/ui-facelift/DESIGN.md`). The rule narrows to: **regenerate the
+> `D8` in `DESIGN.md`, archived 2026-09-24 to `~/Projects/archive/emoney/ui-facelift/DESIGN.md`
+> after the effort closed). The rule narrows to: **regenerate the
 > primitives; the theming layer over them is ours.** Token and `className` changes to
 > `drawer.tsx`, `dialog.tsx`, `sonner.tsx` and `button.tsx` are sanctioned — they are what makes
 > the theme reachable, and wrapping each primitive to avoid the rule would add a file per
