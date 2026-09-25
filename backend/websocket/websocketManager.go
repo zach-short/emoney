@@ -15,10 +15,9 @@ import (
 	"github.com/zachmshort/emoney-backend/controllers"
 	"github.com/zachmshort/emoney-backend/manager"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type RoomManager struct {
@@ -421,7 +420,7 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %v", err)
 	}
@@ -437,7 +436,7 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 	}
 
 	transfer := models.Transfer{
-		ID:        primitive.NewObjectID(),
+		ID:        bson.NewObjectID(),
 		RoomID:    roomObjID,
 		Amount:    amount,
 		Reason:    reason,
@@ -453,7 +452,7 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 		if !ok {
 			return errors.New("invalid payload: expected string for fromPlayerId")
 		}
-		fromID, err := primitive.ObjectIDFromHex(fromPlayerIdStr)
+		fromID, err := bson.ObjectIDFromHex(fromPlayerIdStr)
 		if err != nil {
 			return fmt.Errorf("invalid fromPlayerId: %w", err)
 		}
@@ -462,7 +461,7 @@ func (rm *RoomManager) handleTransfer(client *Client, message Message) error {
 		if !ok {
 			return errors.New("invalid payload: expected string for toPlayerId")
 		}
-		toID, err := primitive.ObjectIDFromHex(toPlayerIdStr)
+		toID, err := bson.ObjectIDFromHex(toPlayerIdStr)
 		if err != nil {
 			return fmt.Errorf("invalid toPlayerId: %w", err)
 		}
@@ -570,7 +569,7 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %v", err)
 	}
@@ -579,7 +578,7 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for playerId")
 	}
-	playerObjID, err := primitive.ObjectIDFromHex(playerId)
+	playerObjID, err := bson.ObjectIDFromHex(playerId)
 	if err != nil {
 		return fmt.Errorf("invalid player ID: %w", err)
 	}
@@ -612,7 +611,7 @@ func (rm *RoomManager) freeParking(client *Client, message Message) error {
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (interface{}, error) {
 		// Reset every captured variable at the top, because WithTransaction
 		// re-runs this callback on a write conflict. Same discipline as
 		// handleCloseAuction, and for the same reason: a retry that inherits
@@ -794,7 +793,7 @@ func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) e
 	if !ok {
 		return errors.New("invalid payload: expected string for buyerId")
 	}
-	buyerID, err := primitive.ObjectIDFromHex(buyerIdStr)
+	buyerID, err := bson.ObjectIDFromHex(buyerIdStr)
 	if err != nil {
 		log.Printf("Invalid buyerId error: %v", err)
 		return fmt.Errorf("invalid buyerId: %w", err)
@@ -804,7 +803,7 @@ func (rm *RoomManager) handlePropertyPurchase(client *Client, message Message) e
 	if !ok {
 		return errors.New("invalid payload: expected string for propertyId")
 	}
-	propertyID, err := primitive.ObjectIDFromHex(propertyIdStr)
+	propertyID, err := bson.ObjectIDFromHex(propertyIdStr)
 	if err != nil {
 		log.Printf("Invalid propertyId error: %v", err)
 		return fmt.Errorf("invalid propertyId: %w", err)
@@ -914,7 +913,7 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 	if !ok {
 		return errors.New("invalid payload: expected string for toPlayerId")
 	}
-	targetPlayerID, err := primitive.ObjectIDFromHex(toPlayerIdStr)
+	targetPlayerID, err := bson.ObjectIDFromHex(toPlayerIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid target player ID: %w", err)
 	}
@@ -923,7 +922,7 @@ func (rm *RoomManager) handleBankTransaction(client *Client, message Message) er
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid target player ID: %w", err)
 	}
@@ -1033,7 +1032,7 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %w", err)
 	}
@@ -1042,7 +1041,7 @@ func (rm *RoomManager) handleManageProperties(client *Client, message Message) e
 	if !ok {
 		return errors.New("invalid payload: expected string for playerId")
 	}
-	playerID, err := primitive.ObjectIDFromHex(playerIdStr)
+	playerID, err := bson.ObjectIDFromHex(playerIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid player ID: %w", err)
 	}
@@ -1215,7 +1214,7 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %w", err)
 	}
@@ -1224,7 +1223,7 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for targetPlayerId")
 	}
-	targetObjID, err := primitive.ObjectIDFromHex(targetIdStr)
+	targetObjID, err := bson.ObjectIDFromHex(targetIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid target player ID: %w", err)
 	}
@@ -1253,7 +1252,7 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 	// knowable without reading them. Absent, null and "" all mean "no successor
 	// named"; anything else has to be a well-formed id, checked here so a
 	// malformed one is refused before the first Mongo call rather than after.
-	var successorObjID primitive.ObjectID
+	var successorObjID bson.ObjectID
 	hasSuccessor := false
 	if raw, present := payload["successorPlayerId"]; present && raw != nil {
 		successorIdStr, ok := raw.(string)
@@ -1261,7 +1260,7 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 			return errors.New("invalid payload: expected string for successorPlayerId")
 		}
 		if successorIdStr != "" {
-			successorObjID, err = primitive.ObjectIDFromHex(successorIdStr)
+			successorObjID, err = bson.ObjectIDFromHex(successorIdStr)
 			if err != nil {
 				return fmt.Errorf("invalid successor player ID: %w", err)
 			}
@@ -1362,7 +1361,7 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (interface{}, error) {
 		// Taken inside the callback rather than above it, so a retry after a
 		// write conflict stamps its own attempt - the reset-on-entry
 		// discipline freeParking keeps for its captured values.
@@ -1405,7 +1404,7 @@ func (rm *RoomManager) handleKickPlayer(client *Client, message Message) error {
 			// face price while it was still a lot, undercutting the auction it
 			// is meant to be sold at. Each lot's own close is what moves the
 			// deed, to the winner or to the Bank.
-			queue := make([]primitive.ObjectID, 0, len(lots)-1)
+			queue := make([]bson.ObjectID, 0, len(lots)-1)
 			for _, lot := range lots[1:] {
 				queue = append(queue, lot.ID)
 			}
@@ -1655,7 +1654,7 @@ func wholeDollars(amount float64) (int, error) {
 // would want to hear about a problem: what they are bidding on, whether they
 // may bid at all, whether the number beats the field, and only then whether
 // they can afford it.
-func bidRejection(auction models.Auction, lotID, bidderID primitive.ObjectID, amount, bidderBalance int) error {
+func bidRejection(auction models.Auction, lotID, bidderID bson.ObjectID, amount, bidderBalance int) error {
 	if auction.PropertyID != lotID {
 		// This is also the "the bid arrived after the hammer" case. A close
 		// advances auction.propertyId to the next deed, so a bid still naming
@@ -1763,7 +1762,7 @@ func advanceAuction(auction models.Auction) *models.Auction {
 		return nil
 	}
 
-	rest := make([]primitive.ObjectID, len(auction.Queue)-1)
+	rest := make([]bson.ObjectID, len(auction.Queue)-1)
 	copy(rest, auction.Queue[1:])
 
 	return &models.Auction{
@@ -1868,7 +1867,7 @@ func (rm *RoomManager) handlePlaceBid(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %w", err)
 	}
@@ -1877,7 +1876,7 @@ func (rm *RoomManager) handlePlaceBid(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for propertyId")
 	}
-	propObjID, err := primitive.ObjectIDFromHex(propertyIdStr)
+	propObjID, err := bson.ObjectIDFromHex(propertyIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid property ID: %w", err)
 	}
@@ -1886,7 +1885,7 @@ func (rm *RoomManager) handlePlaceBid(client *Client, message Message) error {
 	if !ok {
 		return errors.New("invalid payload: expected string for bidderId")
 	}
-	bidderObjID, err := primitive.ObjectIDFromHex(bidderIdStr)
+	bidderObjID, err := bson.ObjectIDFromHex(bidderIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid bidder ID: %w", err)
 	}
@@ -2017,7 +2016,7 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %w", err)
 	}
@@ -2026,7 +2025,7 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 	if !ok {
 		return errors.New("invalid payload: expected string for playerId")
 	}
-	closerObjID, err := primitive.ObjectIDFromHex(closerIdStr)
+	closerObjID, err := bson.ObjectIDFromHex(closerIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid player ID: %w", err)
 	}
@@ -2053,7 +2052,7 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 	if !ok {
 		return errors.New("invalid payload: expected string for propertyId")
 	}
-	lotObjID, err := primitive.ObjectIDFromHex(lotIdStr)
+	lotObjID, err := bson.ObjectIDFromHex(lotIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid property ID: %w", err)
 	}
@@ -2077,7 +2076,7 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 	if !ok {
 		return errors.New("invalid payload: expected string for kickedPlayerId")
 	}
-	kickedObjID, err := primitive.ObjectIDFromHex(kickedIdStr)
+	kickedObjID, err := bson.ObjectIDFromHex(kickedIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid kicked player ID: %w", err)
 	}
@@ -2103,8 +2102,8 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 	}
 
 	var notification string
-	var closedLotID primitive.ObjectID
-	var winnerID *primitive.ObjectID
+	var closedLotID bson.ObjectID
+	var winnerID *bson.ObjectID
 	var price int
 
 	session, err := config.DB.Client().StartSession()
@@ -2113,13 +2112,13 @@ func (rm *RoomManager) handleCloseAuction(client *Client, message Message) error
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (interface{}, error) {
 		// WithTransaction re-runs this callback on a write conflict, so every
 		// value it decides from is read inside it and every captured variable
 		// is reset at the top. Re-reading is not caution here: the point is
 		// that a bid committed by another goroutine between attempts has to be
 		// seen by the retry rather than settled around.
-		notification, closedLotID, winnerID, price = "", primitive.NilObjectID, nil, 0
+		notification, closedLotID, winnerID, price = "", bson.NilObjectID, nil, 0
 
 		var room models.Room
 		if err := roomColl.FindOne(ctx, bson.M{"_id": roomObjID}).Decode(&room); err != nil {
@@ -2341,11 +2340,11 @@ func eventTypeFor(notification string) []string {
 	}
 }
 
-func (rm *RoomManager) CreateEventHistory(notification string, roomId primitive.ObjectID) error {
+func (rm *RoomManager) CreateEventHistory(notification string, roomId bson.ObjectID) error {
 	eventType := eventTypeFor(notification)
 
 	eventHistory := models.EventHistory{
-		ID:        primitive.NewObjectID(),
+		ID:        bson.NewObjectID(),
 		TimeStamp: time.Now(),
 		Event:     notification,
 		RoomID:    roomId,

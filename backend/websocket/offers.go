@@ -11,9 +11,8 @@ import (
 
 	"github.com/zachmshort/emoney-backend/config"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // --- peer-to-peer trades (TRIAGE.md D5) ---
@@ -60,8 +59,8 @@ const maxNoteLength = 280
 // parseObjectIDs turns a JSON array of hex strings into ObjectIDs, refusing a
 // non-array, a non-string element, a malformed id, and a repeat. An absent or
 // null field is an empty list, which is the shape of a side with no deeds.
-func parseObjectIDs(raw interface{}, label string) ([]primitive.ObjectID, error) {
-	ids := make([]primitive.ObjectID, 0)
+func parseObjectIDs(raw interface{}, label string) ([]bson.ObjectID, error) {
+	ids := make([]bson.ObjectID, 0)
 	if raw == nil {
 		return ids, nil
 	}
@@ -69,13 +68,13 @@ func parseObjectIDs(raw interface{}, label string) ([]primitive.ObjectID, error)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: expected an array for %s", label)
 	}
-	seen := make(map[primitive.ObjectID]bool, len(items))
+	seen := make(map[bson.ObjectID]bool, len(items))
 	for _, item := range items {
 		hex, ok := item.(string)
 		if !ok {
 			return nil, fmt.Errorf("invalid payload: expected strings in %s", label)
 		}
-		id, err := primitive.ObjectIDFromHex(hex)
+		id, err := bson.ObjectIDFromHex(hex)
 		if err != nil {
 			return nil, fmt.Errorf("invalid property ID in %s: %w", label, err)
 		}
@@ -99,7 +98,7 @@ func parseObjectIDs(raw interface{}, label string) ([]primitive.ObjectID, error)
 // through wholeDollars for the reason a bid does: a silently truncated 120.9
 // is a trade the player did not make.
 func parseTradeSide(raw interface{}, label string) (models.TradeSide, error) {
-	side := models.TradeSide{Properties: make([]primitive.ObjectID, 0)}
+	side := models.TradeSide{Properties: make([]bson.ObjectID, 0)}
 	if raw == nil {
 		return side, nil
 	}
@@ -139,14 +138,14 @@ func sideIsEmpty(side models.TradeSide) bool {
 // offerRejection is every rule an offer has to clear that needs no state -
 // facts about the payload alone. Pure, and above the first Mongo call in
 // handleCreateOffer, so every rule here has a test.
-func offerRejection(from, to primitive.ObjectID, give, get models.TradeSide, note string) error {
+func offerRejection(from, to bson.ObjectID, give, get models.TradeSide, note string) error {
 	if from == to {
 		return errors.New("you can't make an offer to yourself")
 	}
 	if utf8.RuneCountInString(note) > maxNoteLength {
 		return fmt.Errorf("a note can be at most %d characters", maxNoteLength)
 	}
-	given := make(map[primitive.ObjectID]bool, len(give.Properties))
+	given := make(map[bson.ObjectID]bool, len(give.Properties))
 	for _, id := range give.Properties {
 		given[id] = true
 	}
@@ -174,7 +173,7 @@ func offerRejection(from, to primitive.ObjectID, give, get models.TradeSide, not
 // in this package extends - a room code is the only credential (HANDOFF.md,
 // Settled) - and it is the check that matters: the offer document says who it
 // was made to, and only that player may move both players' money.
-func acceptRejection(offer models.Offer, responder primitive.ObjectID) error {
+func acceptRejection(offer models.Offer, responder bson.ObjectID) error {
 	if offer.Status != models.OfferPending {
 		// Already accepted, denied, withdrawn or countered - or this is the
 		// retry of a double-tap whose first frame already settled it. All of
@@ -220,11 +219,11 @@ func tradePreconditions(from, to models.Player, give, get models.TradeSide, deed
 		return fmt.Errorf("%s is no longer in the game", to.Name)
 	}
 
-	byID := make(map[primitive.ObjectID]models.Property, len(deeds))
+	byID := make(map[bson.ObjectID]models.Property, len(deeds))
 	for _, deed := range deeds {
 		byID[deed.ID] = deed
 	}
-	owns := func(owner models.Player, ids []primitive.ObjectID) error {
+	owns := func(owner models.Player, ids []bson.ObjectID) error {
 		for _, id := range ids {
 			deed, found := byID[id]
 			if !found {
@@ -257,7 +256,7 @@ func tradePreconditions(from, to models.Player, give, get models.TradeSide, deed
 // $200"; "$200"; "Baltic Avenue"; "" for an empty side. A deed whose name is
 // not in deeds - which tradePreconditions has already ruled out on the paths
 // that reach here - reads as "a property" rather than as a blank.
-func sideDescription(side models.TradeSide, deeds map[primitive.ObjectID]models.Property) string {
+func sideDescription(side models.TradeSide, deeds map[bson.ObjectID]models.Property) string {
 	parts := make([]string, 0, len(side.Properties)+1)
 	for _, id := range side.Properties {
 		if deed, found := deeds[id]; found && deed.Name != "" {
@@ -293,7 +292,7 @@ func sideDescription(side models.TradeSide, deeds map[primitive.ObjectID]models.
 // A one-sided trade is a gift, and the sentence says so from the giver's
 // side whichever side that is - "asking nothing back" rather than "for
 // nothing", which reads as a complaint.
-func tradeNotification(fromName, toName string, give, get models.TradeSide, deeds map[primitive.ObjectID]models.Property) string {
+func tradeNotification(fromName, toName string, give, get models.TradeSide, deeds map[bson.ObjectID]models.Property) string {
 	gives := sideDescription(give, deeds)
 	gets := sideDescription(get, deeds)
 
@@ -358,8 +357,8 @@ func offerResolvedNotifications(response, fromName, toName string) (forSender, f
 // readDeeds fetches every property named on either side of a trade, scoped to
 // the room, in one query. On ctx, so inside a transaction it reads from the
 // transaction's snapshot.
-func readDeeds(ctx context.Context, roomObjID primitive.ObjectID, give, get models.TradeSide) ([]models.Property, error) {
-	ids := make([]primitive.ObjectID, 0, len(give.Properties)+len(get.Properties))
+func readDeeds(ctx context.Context, roomObjID bson.ObjectID, give, get models.TradeSide) ([]models.Property, error) {
+	ids := make([]bson.ObjectID, 0, len(give.Properties)+len(get.Properties))
 	ids = append(ids, give.Properties...)
 	ids = append(ids, get.Properties...)
 	deeds := make([]models.Property, 0, len(ids))
@@ -380,8 +379,8 @@ func readDeeds(ctx context.Context, roomObjID primitive.ObjectID, give, get mode
 }
 
 // deedsByID indexes a deed list for the copy functions.
-func deedsByID(deeds []models.Property) map[primitive.ObjectID]models.Property {
-	byID := make(map[primitive.ObjectID]models.Property, len(deeds))
+func deedsByID(deeds []models.Property) map[bson.ObjectID]models.Property {
+	byID := make(map[bson.ObjectID]models.Property, len(deeds))
 	for _, deed := range deeds {
 		byID[deed.ID] = deed
 	}
@@ -418,7 +417,7 @@ type offerClaim struct {
 //     nothing reports ModifiedCount 0, and a write that changed nothing cannot
 //     be relied on to conflict with anything.
 func offerClaims(offer models.Offer, fromName, toName string) []offerClaim {
-	claim := func(playerID primitive.ObjectID, name string) offerClaim {
+	claim := func(playerID bson.ObjectID, name string) offerClaim {
 		return offerClaim{
 			name:   name,
 			filter: bson.M{"_id": playerID, "roomId": offer.RoomID, "isActive": true},
@@ -483,7 +482,7 @@ func (rm *RoomManager) handleCreateOffer(client *Client, message Message) error 
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %w", err)
 	}
@@ -492,7 +491,7 @@ func (rm *RoomManager) handleCreateOffer(client *Client, message Message) error 
 	if !ok {
 		return errors.New("invalid payload: expected string for fromPlayerId")
 	}
-	fromObjID, err := primitive.ObjectIDFromHex(fromIdStr)
+	fromObjID, err := bson.ObjectIDFromHex(fromIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid fromPlayerId: %w", err)
 	}
@@ -501,7 +500,7 @@ func (rm *RoomManager) handleCreateOffer(client *Client, message Message) error 
 	if !ok {
 		return errors.New("invalid payload: expected string for toPlayerId")
 	}
-	toObjID, err := primitive.ObjectIDFromHex(toIdStr)
+	toObjID, err := bson.ObjectIDFromHex(toIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid toPlayerId: %w", err)
 	}
@@ -528,14 +527,14 @@ func (rm *RoomManager) handleCreateOffer(client *Client, message Message) error 
 	// other value has to be a well-formed id, checked here so a malformed one
 	// is refused before the first Mongo call. Same shape as the kick's
 	// optional successorPlayerId.
-	var counterOf *primitive.ObjectID
+	var counterOf *bson.ObjectID
 	if raw, present := payload["counterOf"]; present && raw != nil {
 		hex, ok := raw.(string)
 		if !ok {
 			return errors.New("invalid payload: expected string for counterOf")
 		}
 		if hex != "" {
-			id, err := primitive.ObjectIDFromHex(hex)
+			id, err := bson.ObjectIDFromHex(hex)
 			if err != nil {
 				return fmt.Errorf("invalid counterOf: %w", err)
 			}
@@ -552,7 +551,7 @@ func (rm *RoomManager) handleCreateOffer(client *Client, message Message) error 
 
 	now := time.Now()
 	offer := models.Offer{
-		ID:           primitive.NewObjectID(),
+		ID:           bson.NewObjectID(),
 		RoomID:       roomObjID,
 		Status:       models.OfferPending,
 		FromPlayerID: fromObjID,
@@ -576,7 +575,7 @@ func (rm *RoomManager) handleCreateOffer(client *Client, message Message) error 
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (interface{}, error) {
 		// Reset every captured variable at the top, because WithTransaction
 		// re-runs this callback on a write conflict. Same discipline as
 		// handleCloseAuction. The offer document itself is built once above
@@ -745,7 +744,7 @@ func (rm *RoomManager) handleRespondOffer(client *Client, message Message) error
 	if !ok {
 		return errors.New("invalid payload: expected string for roomId")
 	}
-	roomObjID, err := primitive.ObjectIDFromHex(roomIdStr)
+	roomObjID, err := bson.ObjectIDFromHex(roomIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid room ID: %w", err)
 	}
@@ -754,7 +753,7 @@ func (rm *RoomManager) handleRespondOffer(client *Client, message Message) error
 	if !ok {
 		return errors.New("invalid payload: expected string for offerId")
 	}
-	offerObjID, err := primitive.ObjectIDFromHex(offerIdStr)
+	offerObjID, err := bson.ObjectIDFromHex(offerIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid offer ID: %w", err)
 	}
@@ -763,7 +762,7 @@ func (rm *RoomManager) handleRespondOffer(client *Client, message Message) error
 	if !ok {
 		return errors.New("invalid payload: expected string for playerId")
 	}
-	responderObjID, err := primitive.ObjectIDFromHex(responderIdStr)
+	responderObjID, err := bson.ObjectIDFromHex(responderIdStr)
 	if err != nil {
 		return fmt.Errorf("invalid player ID: %w", err)
 	}
@@ -850,7 +849,7 @@ func (rm *RoomManager) handleRespondOffer(client *Client, message Message) error
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (interface{}, error) {
 		// WithTransaction re-runs this callback on a write conflict, so every
 		// value it decides from is read inside it and every captured variable
 		// is reset at the top. The re-read is the mechanism: a second accept
@@ -916,7 +915,7 @@ func (rm *RoomManager) handleRespondOffer(client *Client, message Message) error
 		// name the current owner would overwrite whoever bought it in the
 		// gap. The mortgage flag and the development level travel with the
 		// deed - see tradePreconditions on why houses are not razed here.
-		handOver := func(ids []primitive.ObjectID, owner, newOwner models.Player) error {
+		handOver := func(ids []bson.ObjectID, owner, newOwner models.Player) error {
 			for _, id := range ids {
 				result, err := propColl.UpdateOne(ctx,
 					bson.M{"_id": id, "roomId": roomObjID, "playerId": owner.ID},

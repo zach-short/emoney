@@ -9,9 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zachmshort/emoney-backend/config"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 func CreateRoom(c *gin.Context) {
@@ -36,8 +35,8 @@ func CreateRoom(c *gin.Context) {
 		return
 	}
 
-	roomID := primitive.NewObjectID()
-	playerID := primitive.NewObjectID()
+	roomID := bson.NewObjectID()
+	playerID := bson.NewObjectID()
 
 	room := models.Room{
 		ID:   roomID,
@@ -64,7 +63,7 @@ func CreateRoom(c *gin.Context) {
 	}
 
 	eventHistory := models.EventHistory{
-		ID:        primitive.NewObjectID(),
+		ID:        bson.NewObjectID(),
 		RoomID:    roomID,
 		TimeStamp: time.Now(),
 		Event:     fmt.Sprintf("%s created a new room, %s", banker.Name, requestBody.RoomName),
@@ -74,7 +73,7 @@ func CreateRoom(c *gin.Context) {
 	var interfaceSlice []any
 	for i := range config.DefaultProperties {
 		properties[i] = models.Property{
-			ID:               primitive.NewObjectID(),
+			ID:               bson.NewObjectID(),
 			RoomID:           roomID,
 			PropertyIndex:    i,
 			Color:            config.DefaultProperties[i].Color,
@@ -102,7 +101,7 @@ func CreateRoom(c *gin.Context) {
 		return
 	}
 
-	err = mongo.WithSession(c, session, func(sc mongo.SessionContext) error {
+	err = mongo.WithSession(c, session, func(sc context.Context) error {
 		roomColl := config.DB.Collection("Room")
 		_, err := roomColl.InsertOne(sc, room)
 		if err != nil {
@@ -184,7 +183,7 @@ func JoinRoom(c *gin.Context) {
 		return
 	}
 
-	newPlayerID := primitive.NewObjectID()
+	newPlayerID := bson.NewObjectID()
 	newPlayer := models.Player{
 		ID:       newPlayerID,
 		RoomID:   room.ID,

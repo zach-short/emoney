@@ -8,10 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zachmshort/emoney-backend/config"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // GetPendingOffers is the inbox read: every PENDING offer in the room that
@@ -34,7 +33,7 @@ func GetPendingOffers(c *gin.Context) {
 	code := c.Param("code")
 	playerIdStr := c.Query("playerId")
 
-	playerObjID, err := primitive.ObjectIDFromHex(playerIdStr)
+	playerObjID, err := bson.ObjectIDFromHex(playerIdStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid player ID"})
 		return

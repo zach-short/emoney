@@ -6,8 +6,7 @@ import (
 	"testing"
 
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // These cover the two trade handlers in offers.go and the pure rules beside
@@ -549,12 +548,12 @@ func bob() models.Player {
 	return models.Player{ID: mustObjectID(bobHex), Name: "Bob", IsActive: true, Balance: 500}
 }
 
-func deed(hex, name string, owner primitive.ObjectID) models.Property {
+func deed(hex, name string, owner bson.ObjectID) models.Property {
 	return models.Property{ID: mustObjectID(hex), Name: name, PlayerID: owner}
 }
 
 func side(amount int, hexes ...string) models.TradeSide {
-	ids := make([]primitive.ObjectID, 0, len(hexes))
+	ids := make([]bson.ObjectID, 0, len(hexes))
 	for _, hex := range hexes {
 		ids = append(ids, mustObjectID(hex))
 	}
@@ -613,7 +612,7 @@ func TestTradePreconditionsRefusesADeedTheBankHolds(t *testing.T) {
 	// A bank-held deed has no playerId at all, which decodes as the zero
 	// ObjectID - never equal to a real player's.
 	deeds := tableDeeds()
-	deeds[0].PlayerID = primitive.NilObjectID
+	deeds[0].PlayerID = bson.NilObjectID
 
 	err := tradePreconditions(alice(), bob(), side(0, deed1Hex), side(0), deeds)
 	wantErrEqual(t, err, "Alice doesn't own Baltic Avenue")
@@ -715,7 +714,7 @@ func TestOfferClaimsClaimBothPlayersTheOfferNames(t *testing.T) {
 		t.Fatalf("got %d claims, want one for each player the offer names", len(claims))
 	}
 	for i, want := range []struct {
-		id   primitive.ObjectID
+		id   bson.ObjectID
 		name string
 	}{
 		{offer.FromPlayerID, "Alice"},
@@ -737,7 +736,7 @@ func TestOfferClaimsArePinnedToAnActivePlayerInThisRoom(t *testing.T) {
 	// kick has already marked gone.
 	offer := pendingOffer()
 	claims := offerClaims(offer, "Alice", "Bob")
-	for i, id := range []primitive.ObjectID{offer.FromPlayerID, offer.ToPlayerID} {
+	for i, id := range []bson.ObjectID{offer.FromPlayerID, offer.ToPlayerID} {
 		want := bson.M{"_id": id, "roomId": offer.RoomID, "isActive": true}
 		if !reflect.DeepEqual(claims[i].filter, want) {
 			t.Fatalf("claim %d filter is %v, want %v", i, claims[i].filter, want)

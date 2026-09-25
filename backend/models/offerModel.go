@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // OfferStatus is the four-state life of an offer. It mirrors the union in
@@ -35,8 +35,8 @@ const (
 // with make, so it marshals as [] rather than null and the browser's
 // `.length` reads do not have to guard. Amount is whole dollars and may be 0.
 type TradeSide struct {
-	Properties []primitive.ObjectID `bson:"properties" json:"properties"`
-	Amount     int                  `bson:"amount" json:"amount"`
+	Properties []bson.ObjectID `bson:"properties" json:"properties"`
+	Amount     int             `bson:"amount" json:"amount"`
 }
 
 // Offer is one peer-to-peer trade proposal between two players in a room. It
@@ -53,19 +53,19 @@ type TradeSide struct {
 // implies enforcement. The note is a handshake the app writes down, and the
 // UI copy says so.
 type Offer struct {
-	ID           primitive.ObjectID `bson:"_id" json:"id"`
-	RoomID       primitive.ObjectID `bson:"roomId" json:"roomId"`
-	Status       OfferStatus        `bson:"status" json:"status"`
-	FromPlayerID primitive.ObjectID `bson:"fromPlayerId" json:"fromPlayerId"`
-	ToPlayerID   primitive.ObjectID `bson:"toPlayerId" json:"toPlayerId"`
-	Offer        TradeSide          `bson:"offer" json:"offer"`
-	Request      TradeSide          `bson:"request" json:"request"`
-	Note         string             `bson:"note" json:"note"`
-	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`
+	ID           bson.ObjectID `bson:"_id" json:"id"`
+	RoomID       bson.ObjectID `bson:"roomId" json:"roomId"`
+	Status       OfferStatus   `bson:"status" json:"status"`
+	FromPlayerID bson.ObjectID `bson:"fromPlayerId" json:"fromPlayerId"`
+	ToPlayerID   bson.ObjectID `bson:"toPlayerId" json:"toPlayerId"`
+	Offer        TradeSide     `bson:"offer" json:"offer"`
+	Request      TradeSide     `bson:"request" json:"request"`
+	Note         string        `bson:"note" json:"note"`
+	CreatedAt    time.Time     `bson:"createdAt" json:"createdAt"`
+	UpdatedAt    time.Time     `bson:"updatedAt" json:"updatedAt"`
 	// CounterOf is the offer this one answers, when it is a counter, else nil.
 	// A pointer so it serialises as null rather than a zero ObjectID the
 	// browser would have to recognise; no omitempty so the key is always on
 	// the wire.
-	CounterOf *primitive.ObjectID `bson:"counterOf" json:"counterOf"`
+	CounterOf *bson.ObjectID `bson:"counterOf" json:"counterOf"`
 }

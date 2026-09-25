@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // The first tests in this package. They reach exactly one thing -
@@ -22,11 +22,11 @@ import (
 // does so explicitly, by reusing one fixture as both from and to.
 
 func active(balance int) models.Player {
-	return models.Player{ID: primitive.NewObjectID(), IsActive: true, Balance: balance}
+	return models.Player{ID: bson.NewObjectID(), IsActive: true, Balance: balance}
 }
 
 func removed(balance int) models.Player {
-	return models.Player{ID: primitive.NewObjectID(), IsActive: false, Balance: balance}
+	return models.Player{ID: bson.NewObjectID(), IsActive: false, Balance: balance}
 }
 
 func TestTransferRejectionAcceptsAnAffordableSend(t *testing.T) {

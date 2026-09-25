@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/zachmshort/emoney-backend/controllers"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 var upgrader = websocket.Upgrader{
@@ -150,7 +150,7 @@ func HandleWebSocket(c *gin.Context) {
 		case "JOIN":
 			if payload, ok := message.Payload.(map[string]interface{}); ok {
 				if playerId, ok := payload["playerId"].(string); ok {
-					playerObjID, err := primitive.ObjectIDFromHex(playerId)
+					playerObjID, err := bson.ObjectIDFromHex(playerId)
 					if err != nil {
 						log.Printf("Error converting player ID: %v", err)
 						continue

@@ -3,17 +3,17 @@ package models
 import (
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type Room struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	Name        string             `bson:"name" json:"name"`
-	Code        string             `bson:"code" json:"code"`
-	FreeParking int                `bson:"freeParking" json:"freeParking"`
-	RoomRules   RoomRules          `bson:"roomRules" json:"roomRules"`
-	CreatedAt   time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt   time.Time          `bson:"updatedAt" json:"updatedAt"`
+	ID          bson.ObjectID `bson:"_id,omitempty" json:"id"`
+	Name        string        `bson:"name" json:"name"`
+	Code        string        `bson:"code" json:"code"`
+	FreeParking int           `bson:"freeParking" json:"freeParking"`
+	RoomRules   RoomRules     `bson:"roomRules" json:"roomRules"`
+	CreatedAt   time.Time     `bson:"createdAt" json:"createdAt"`
+	UpdatedAt   time.Time     `bson:"updatedAt" json:"updatedAt"`
 	// Auction is the live auction of a kicked player's estate, or nil when
 	// no auction is running in this room. Persisted here rather than in
 	// process memory (D18) - see models/auctionModel.go. omitempty on both

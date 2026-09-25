@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // These reach exactly one thing - propertyPurchaseRejection - and that is the
@@ -25,13 +25,13 @@ import (
 // Go side of the `playerId: nil` filter GetAvailableProperties uses to decide
 // what is purchasable at all.
 func forSale(name string, price int) models.Property {
-	return models.Property{ID: primitive.NewObjectID(), Name: name, Price: price}
+	return models.Property{ID: bson.NewObjectID(), Name: name, Price: price}
 }
 
 // owned is the same deed after somebody has bought it.
 func owned(name string, price int) models.Property {
 	p := forSale(name, price)
-	p.PlayerID = primitive.NewObjectID()
+	p.PlayerID = bson.NewObjectID()
 	return p
 }
 

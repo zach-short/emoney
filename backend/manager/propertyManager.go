@@ -9,15 +9,14 @@ import (
 
 	"github.com/zachmshort/emoney-backend/config"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-func HandleHouseManagement(roomObjID primitive.ObjectID, manageType string, propertyDetails models.PropertyDetails) error {
+func HandleHouseManagement(roomObjID bson.ObjectID, manageType string, propertyDetails models.PropertyDetails) error {
 	propertyColl := config.DB.Collection("Property")
 
 	for _, detail := range propertyDetails {
-		propertyObjID, err := primitive.ObjectIDFromHex(detail.PropertyID)
+		propertyObjID, err := bson.ObjectIDFromHex(detail.PropertyID)
 		if err != nil {
 			return fmt.Errorf("invalid property ID: %s", detail.PropertyID)
 		}
@@ -33,11 +32,11 @@ func HandleHouseManagement(roomObjID primitive.ObjectID, manageType string, prop
 	return nil
 }
 
-func HandlePropertySaleMortgage(roomObjID primitive.ObjectID, manageType string, propertyDetails models.PropertyDetails) error {
+func HandlePropertySaleMortgage(roomObjID bson.ObjectID, manageType string, propertyDetails models.PropertyDetails) error {
 	manageType = strings.TrimSpace(manageType)
 	propertyColl := config.DB.Collection("Property")
 	for _, detail := range propertyDetails {
-		propertyObjID, err := primitive.ObjectIDFromHex(detail.PropertyID)
+		propertyObjID, err := bson.ObjectIDFromHex(detail.PropertyID)
 		if err != nil {
 			return fmt.Errorf("invalid property id")
 		}

@@ -5,11 +5,10 @@ import (
 	"fmt"
 
 	"github.com/zachmshort/emoney-backend/config"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-func UpdatePlayerBalance(playerID primitive.ObjectID, amount int) error {
+func UpdatePlayerBalance(playerID bson.ObjectID, amount int) error {
 	playersColl := config.DB.Collection("Player")
 	filter := bson.M{"_id": playerID}
 	update := bson.M{"$inc": bson.M{"balance": -amount}}

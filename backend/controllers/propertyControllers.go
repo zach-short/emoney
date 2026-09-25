@@ -9,9 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zachmshort/emoney-backend/config"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 func MortgageProperty(c *gin.Context) {}
@@ -114,7 +112,7 @@ func propertyPurchaseRejection(buyer models.Player, property models.Property, pr
 // freeParking's "transaction failed: %w", because it is what the player is
 // shown: "a removed player cannot buy property" is a sentence, and
 // "transaction failed: a removed player cannot buy property" is a bug report.
-func PurchaseProperty(propertyID, buyerID primitive.ObjectID, price int) (models.Property, models.Player, error) {
+func PurchaseProperty(propertyID, buyerID bson.ObjectID, price int) (models.Property, models.Player, error) {
 	var property models.Property
 	var buyer models.Player
 
@@ -124,7 +122,7 @@ func PurchaseProperty(propertyID, buyerID primitive.ObjectID, price int) (models
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (interface{}, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (interface{}, error) {
 		// Reset every captured variable at the top, because WithTransaction
 		// re-runs this callback on a write conflict. Same discipline as
 		// freeParking and handleCloseAuction, and for the same reason: a retry
@@ -195,7 +193,7 @@ func PurchaseProperty(propertyID, buyerID primitive.ObjectID, price int) (models
 	return property, buyer, nil
 }
 
-func AssignOwnerShipProperty(propertyID, buyerID primitive.ObjectID) error {
+func AssignOwnerShipProperty(propertyID, buyerID bson.ObjectID) error {
 	_, err := config.DB.Collection("Property").UpdateOne(
 		context.Background(),
 		bson.M{"_id": propertyID},

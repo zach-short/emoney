@@ -9,10 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/zachmshort/emoney-backend/config"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func GetPlayersInRoom(c *gin.Context) {
@@ -35,7 +33,7 @@ func GetPlayersInRoom(c *gin.Context) {
 
 	var existingPlayer *models.Player
 	if playerId != "" {
-		playerObjectID, err := primitive.ObjectIDFromHex(playerId)
+		playerObjectID, err := bson.ObjectIDFromHex(playerId)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid player ID"})
 			return
@@ -118,7 +116,7 @@ func GetPlayersInRoom(c *gin.Context) {
 }
 
 func GetPlayerDetails(c *gin.Context) {
-	playerId, _ := primitive.ObjectIDFromHex(c.Param("playerId"))
+	playerId, _ := bson.ObjectIDFromHex(c.Param("playerId"))
 
 	playerColl := config.DB.Collection("Player")
 	var player models.Player
@@ -163,7 +161,7 @@ func GetPlayerDetails(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func GetPlayer(buyerID primitive.ObjectID) (*models.Player, error) {
+func GetPlayer(buyerID bson.ObjectID) (*models.Player, error) {
 	var buyer models.Player
 	err := config.DB.Collection("Player").FindOne(context.Background(), bson.M{"_id": buyerID}).Decode(&buyer)
 	if err != nil {
@@ -173,14 +171,14 @@ func GetPlayer(buyerID primitive.ObjectID) (*models.Player, error) {
 	return &buyer, nil
 }
 
-func UpdateFreeParkingBalance(roomID primitive.ObjectID, amount int, isAdd bool, playerID *primitive.ObjectID) error {
+func UpdateFreeParkingBalance(roomID bson.ObjectID, amount int, isAdd bool, playerID *bson.ObjectID) error {
 	session, err := config.DB.Client().StartSession()
 	if err != nil {
 		return fmt.Errorf("failed to start session: %w", err)
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (any, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (any, error) {
 		freeParkingChange := amount
 		if !isAdd {
 			freeParkingChange = -amount
@@ -212,14 +210,14 @@ func UpdateFreeParkingBalance(roomID primitive.ObjectID, amount int, isAdd bool,
 	return err
 }
 
-func UpdatePlayerBalanceByBanker(roomID primitive.ObjectID, playerID primitive.ObjectID, amount int, isAdd bool) error {
+func UpdatePlayerBalanceByBanker(roomID bson.ObjectID, playerID bson.ObjectID, amount int, isAdd bool) error {
 	session, err := config.DB.Client().StartSession()
 	if err != nil {
 		return fmt.Errorf("failed to start session: %w", err)
 	}
 	defer session.EndSession(context.Background())
 
-	_, err = session.WithTransaction(context.Background(), func(ctx mongo.SessionContext) (any, error) {
+	_, err = session.WithTransaction(context.Background(), func(ctx context.Context) (any, error) {
 		balanceChange := amount
 		if !isAdd {
 			balanceChange = -amount

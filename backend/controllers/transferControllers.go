@@ -7,8 +7,8 @@ import (
 
 	"github.com/zachmshort/emoney-backend/config"
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type Transfer = models.Transfer
@@ -80,7 +80,7 @@ func PlayerTransfer(transfer Transfer) error {
 		return err
 	}
 
-	err = mongo.WithSession(context.Background(), session, func(sc mongo.SessionContext) error {
+	err = mongo.WithSession(context.Background(), session, func(sc context.Context) error {
 		playerColl := config.DB.Collection("Player")
 
 		// Both players are read HERE, inside the transaction and on sc, and

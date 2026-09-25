@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/zachmshort/emoney-backend/models"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // --- the live auction (D14-D18) ---
@@ -38,8 +38,8 @@ var (
 	testKickedID  = mustObjectID("507f1f77bcf86cd799439032")
 )
 
-func mustObjectID(hex string) primitive.ObjectID {
-	id, err := primitive.ObjectIDFromHex(hex)
+func mustObjectID(hex string) bson.ObjectID {
+	id, err := bson.ObjectIDFromHex(hex)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +53,7 @@ func openAuction() models.Auction {
 	return models.Auction{
 		KickedPlayerID: testKickedID,
 		PropertyID:     testLotID,
-		Queue:          []primitive.ObjectID{testNextLotID, testThirdLot},
+		Queue:          []bson.ObjectID{testNextLotID, testThirdLot},
 		HighBid:        0,
 		HighBidderID:   nil,
 		LotCount:       3,
@@ -361,7 +361,7 @@ func TestAdvanceAuctionResetsTheBidding(t *testing.T) {
 
 func TestAdvanceAuctionEndsAfterTheLastDeed(t *testing.T) {
 	auction := openAuction()
-	auction.Queue = []primitive.ObjectID{testNextLotID}
+	auction.Queue = []bson.ObjectID{testNextLotID}
 
 	next := advanceAuction(auction)
 	if next == nil {

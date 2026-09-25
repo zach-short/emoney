@@ -52,8 +52,14 @@ machine.
   it was `false` before that), Tailwind 3.4, shadcn/ui on Radix, axios, sonner, vaul,
   next-themes. Package manager is **bun 1.2.9**
   (`frontend/bun.lockb`) — not npm, not pnpm.
-- **backend/** — Go (declared 1.23.2 in `backend/go.mod:3`; the installed toolchain is 1.24.1),
-  Gin 1.10.0, gorilla/websocket 1.5.3, mongo-driver 1.17.1, godotenv.
+- **backend/** — Go (declared 1.26.0 in `backend/go.mod:3`, `toolchain go1.26.8` at `:5`; the
+  machine's base `go` is 1.24.1 and `GOTOOLCHAIN=auto` fetches 1.26.8, so `go version` prints
+  go1.24.1 at the repo root and go1.26.8 inside `backend/` — re-verified 2026-09-25, HANDOFF 74;
+  the "1.23.2 / 1.24.1" pair that stood here until then was true until row 22), Gin 1.10.0,
+  gorilla/websocket 1.5.3, **mongo-driver v2** (`go.mongodb.org/mongo-driver/v2` v2.9.1, migrated
+  2026-09-25, HANDOFF 74 — v1's `bson/primitive` package no longer exists: ids are `bson.ObjectID`
+  and transaction callbacks take a plain `context.Context`; `backend/models/wire_test.go` pins the
+  codec behaviour a driver bump must not move), godotenv.
 - **Data** — MongoDB Atlas. The backend requires `DATABASE_URL` and `DATABASE_NAME` and calls
   `log.Fatal` without them (`backend/config/db.go:62-85`).
 - **No CI** (no `.github/`, 2026-09-16). **Go has tests as of 2026-09-16** (HANDOFF 4-5) — two

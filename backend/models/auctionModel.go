@@ -1,7 +1,7 @@
 package models
 
 import (
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 // Auction is one live auction of one kicked player's estate. It lives on the
@@ -26,17 +26,17 @@ type Auction struct {
 	// the removed player themselves - they have no socket after the kick's
 	// force-close and no standing in the room, but the payload carries a
 	// player id and nothing else here would catch it.
-	KickedPlayerID primitive.ObjectID `bson:"kickedPlayerId" json:"kickedPlayerId"`
+	KickedPlayerID bson.ObjectID `bson:"kickedPlayerId" json:"kickedPlayerId"`
 
 	// PropertyID is the open lot: the one deed bids are being taken on. A bid
 	// naming any other property is refused, which is also what makes a bid
 	// that arrives after its lot closed fail rather than land on the next one.
-	PropertyID primitive.ObjectID `bson:"propertyId" json:"propertyId"`
+	PropertyID bson.ObjectID `bson:"propertyId" json:"propertyId"`
 
 	// Queue is the deeds still to come, in PropertyIndex order, not including
 	// the open lot. Empty means this is the last lot and closing it ends the
 	// auction.
-	Queue []primitive.ObjectID `bson:"queue" json:"queue"`
+	Queue []bson.ObjectID `bson:"queue" json:"queue"`
 
 	// HighBid is the current high bid on the open lot, in whole dollars. A lot
 	// opens at 0 and the minimum raise is 1 (D15), so "beats the high bid" and
@@ -48,7 +48,7 @@ type Auction struct {
 	// "000000000000000000000000", which a client would have to know to treat
 	// as "nobody". nil serialises as null, and no omitempty, so the key is
 	// always present on the wire.
-	HighBidderID *primitive.ObjectID `bson:"highBidderId" json:"highBidderId"`
+	HighBidderID *bson.ObjectID `bson:"highBidderId" json:"highBidderId"`
 
 	// LotCount is how many deeds this auction runs through in total: the open
 	// lot plus everything in Queue at the moment handleKickPlayer opens it. It
