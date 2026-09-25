@@ -514,7 +514,16 @@ const RoomPage = ({ params }: { params: Promise<{ code: string }> }) => {
   return (
     <DataState
       data={combinedData}
-      loading={!initialLoadComplete}
+      // Not just "hasn't succeeded yet": a read that has definitively failed
+      // (its own `error` is set) has to end `loading` too, or `DataState` --
+      // which checks `loading` before `error` -- spins forever on a first
+      // attempt that 404s or drops the network, with no way to reach
+      // `Fallback`'s retry. `usePublicFetch` only sets `error` for a failure
+      // before that read's first success (D4 leaves it null after), so this
+      // cannot mask the post-latch retry-with-toast behavior below, and a
+      // slow-but-eventually-successful start is unaffected since `error`
+      // stays null throughout it.
+      loading={!initialLoadComplete && !error}
       error={error}
       refetch={() => {
         refetchPlayers();
