@@ -13,6 +13,13 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+// eventHistoryLimit caps GetPlayersInRoom's history read (board row 33, D2 in
+// docs/incomplete/room-state-sync/DESIGN.md §6). A cap over a page: the panel
+// (frontend/components/navbar/navbar.tsx) has no "load more" and reads
+// whatever this endpoint returns, so paging would need a frontend change this
+// row does not own. Reversible by changing this constant alone.
+const eventHistoryLimit = 100
+
 func GetPlayersInRoom(c *gin.Context) {
 	code := c.Param("code")
 	playerId := c.Query("playerId")
@@ -67,26 +74,34 @@ func GetPlayersInRoom(c *gin.Context) {
 		return
 	}
 
-	for i, player := range players {
-		var properties []models.Property
-		propCursor, err := propertyCollection.Find(c, bson.M{
-			"roomId":   room.ID,
-			"playerId": player.ID,
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get properties"})
-			return
-		}
-		if err := propCursor.All(c, &properties); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode properties"})
-			return
-		}
+	var roomProperties []models.Property
+	propCursor, err := propertyCollection.Find(c, query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get properties"})
+		return
+	}
+	if err := propCursor.All(c, &roomProperties); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode properties"})
+		return
+	}
 
-		players[i].Properties = properties
+	// One Property find for the whole room, grouped here instead of one find
+	// per player (board row 33). A deed still in the Bank's hands decodes with
+	// a zero PlayerID (models/wire_test.go:TestPropertyDecodesANullPlayerIdAsNoOwner)
+	// and is dropped by IsZero() below rather than grouped under some player.
+	propertiesByPlayer := make(map[bson.ObjectID][]models.Property, len(players))
+	for _, property := range roomProperties {
+		if property.PlayerID.IsZero() {
+			continue
+		}
+		propertiesByPlayer[property.PlayerID] = append(propertiesByPlayer[property.PlayerID], property)
+	}
+	for i := range players {
+		players[i].Properties = propertiesByPlayer[players[i].ID]
 	}
 
 	var eventHistory []models.EventHistory
-	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}})
+	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}).SetLimit(eventHistoryLimit)
 	cursor, err = eventHistoryCollection.Find(c, query, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get event history"})
